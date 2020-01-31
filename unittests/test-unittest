@@ -1,0 +1,47 @@
+#!/usr/bin/env node
+
+const fs = require('fs');
+const ethers = require("ethers");
+  
+async function deploy(bytecodeFilename, abi, testFunctions, verbose=false) {
+
+  const endpoint = "http://localhost:8545";
+  const provider = new ethers.providers.JsonRpcProvider(endpoint);
+  
+  const bytecode = fs.readFileSync(bytecodeFilename).toString().replace(/\n|\t|\r| /g, "");
+  const signer = provider.getSigner(0);
+  const creator = signer.getAddress();
+
+  console.log("sending creation transaction...")
+  let factory = new ethers.ContractFactory(abi, bytecode, signer);
+  let contract = await factory.deploy();
+  await contract.deployed();
+  console.log("contract address: " + contract.address);
+  console.log("transaction hash: " + contract.deployTransaction.hash);
+  let deployedBytecode = await provider.getCode(contract.address);
+  console.log("deployed bytecode: " + deployedBytecode);
+
+  console.log("\nTesting function calls...\n");
+
+  for (const func of testFunctions) {
+    
+    await contract[func.name].apply(null, func.args).then((result) => {
+
+      if (func.expectSuccess)  console.log(func.name + ": pass");
+      else                     console.log(func.name + ": fail");
+
+      if (verbose)  console.log(JSON.stringify(result, null, 2));
+
+    }, (error) => {
+
+      if (!func.expectSuccess)  console.log(func.name + ": pass"); 
+      else                      console.log(func.name + ": fail"); 
+
+      if (verbose)  console.log(JSON.stringify(error, null, 2));
+
+    })
+  }
+
+}
+
+module.exports = { deploy }

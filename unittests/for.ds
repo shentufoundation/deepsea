@@ -1,0 +1,24 @@
+object signature OS = {
+  multiply : int * int -> unit
+}
+
+object O : OS {
+
+  let _val : int := 0
+  
+  (* a can be negative;
+     b must be positive *)
+  let multiply (a, b) =
+    for i = 0 to b do
+      begin
+        let val = _val in
+        _val := val + a
+      end;
+    let val = _val in assert(val = a*b);
+    _val := 0
+
+}
+
+layer L = {
+  o = O
+}
