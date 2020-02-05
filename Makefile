@@ -4,9 +4,7 @@
 
 NAME="DeepSEA language reference"
 
-pdf:
-	make tex
-	make clean
+pdf: tex clean
 
 tex:
 	pandoc -s -o ${NAME}.tex ${NAME}.md
