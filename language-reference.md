@@ -16,7 +16,7 @@ This document describes the programming part of the DeepSEA language: it shows h
 
 The language described in this manual is “version 0.9”. We intend to completely implement it in spring 2020. At that point it will have enough features to write some nontrivial contracts, but it will still be undergoing further development, and the language manual will be continuously updated as the language evolves.
 
-The January 2020 release is a “pre-alpha preview”. Some of the features of the version 0.9 language described in this manual are not yet implemented:
+:exclamation: The January 2020 release is a “pre-alpha preview”. Some of the features of the version 0.9 language described in this manual are not yet implemented:
 
 - Function calls sometimes fail.
 - Events are not implemented in the frontend, and the backend only supports one-argument anonymous events.
@@ -63,7 +63,7 @@ usage: dsc <source file> <mode>
 - minic : Compile to the MiniC IR. For now, this is for debugging only; the MiniC itself is not executable. This will be added in a future update.
 - coq : Create a directory with a gallina model of the contract.
 
-The coq option is not supported in the preview release.
+:exclamation: The coq option is not supported in the preview release.
 
 ### Running Unit Tests
 
@@ -75,7 +75,7 @@ If you just want to try compiling some programs, all you need is to download the
 
 - [ganache-cli](https://github.com/trufflesuite/ganache-cli)
 
-**Ubuntu / Debian**
+#### Ubuntu / Debian
 
 The following will configure npm to install global packages in ~/.npm-global
 
@@ -88,7 +88,7 @@ export PATH=$PATH:~/.npm-global/bin
 
 You'll probably want to configure your shell to add ~/.npm-global/bin to your \$PATH on startup.
 
-**MacOS**
+#### MacOS
 
 Downloading node.js from the website [https://nodejs.org/en/](https://nodejs.org/en/) will install both node.js and npm at the same time. It is recommended to upgrade npm immediately after installing:
 
@@ -121,8 +121,8 @@ The test script will use ethers.js to connect to the ganache server to run the b
 To run all the tests:
 
 ```bash
-$ for i in *.ds; do dsc $i bytecode > \${i%.\*}.bytecode; done
-$ for i in *.js; do ./$i; done
+for i in *.ds; do dsc $i bytecode > \${i%.\*}.bytecode; done
+for i in *.js; do ./$i; done
 ```
 
 ### Running a contract locally in ganache-cli
@@ -255,7 +255,7 @@ type addr := uint
 
 A struct (a.k.a. record) type defines a set of fields.
 
-```
+```ocaml
 type Usage = {
   u_quota : int;
   u_usage : int
@@ -264,9 +264,11 @@ type Usage = {
 
 Fields can be accessed by dot-notation. This is useful as a component of a larger type, e.g. we can define a mapping from integers to Usage,
 
+```ocaml
 let usages : mapping[int] Usage
+```
 
-and then access it as usages[i].u_usage.
+and then access it as `usages[i].u_usage`.
 
 #### Algebraic types
 
@@ -274,63 +276,57 @@ It is also possible to declare the algebraic datatypes, similar to datatypes dec
 
 There is also a smaller subset of datatype declarations which can be used for code as well as for writing specifications. In the future this will be extended to cover more idioms, but for now algebraic types can be used as enums, i.e. to give names to a set of integer constants. For example, one can write
 
+```ocaml
 type Status [[int]] =
-
-| Ok [[= 0]]
-
-| Triggered [[= 1]]
-
-| Finalized [[= 2]]
+  | Ok        [[= 0]]
+  | Triggered [[= 1]]
+  | Finalized [[= 2]]
+```
 
 The annotations in double square brackets mean that values of the type will be realized as an int, and gives the corresponding values. After this declaration, the constructor Ok, Triggered, etc can be used as values, and one can write a match statement
 
+```ocaml
 match x with
-
 | Ok =>
-
-...
-
+   ...
 | Triggered =>
-
-...
-
+   ...
 | Finalized =>
-
-...
-
+   ...
 end
+```
 
 The match statement is translated into a series of if-statements comparing x with the given values, but unlike using integers directly the typechecker will enforce that all possible values of the type are handled.
 
 #### Event types
 
-Ethereum events are not implemented in this preview release.
+:exclamation: Ethereum events are not implemented in this preview release.
 
 The syntax for declaring Ethereum event types is similar to the syntax for algebraic types, except it used the keyword “event”, there is no name for the datatype, and each constructor argument can optionally be tagged as “indexed”:
 
+```ocaml
 event
-
     Transfer(from : address indexed) (to: address indexed) (value: uint)
-
-| Approval(owner: address indexed) (spender: address indexed) (value: uint)
+  | Approval(owner: address indexed) (spender: address indexed) (value: uint)
+```
 
 You can also use a bar before the first line, with no change in meaning, so the above declaration could equivalently be written:
 
+```ocaml
 event
-
-| Transfer(from : address indexed) (to: address indexed) (value: uint)
-
-| Approval(owner: address indexed) (spender: address indexed) (value: uint)
+  | Transfer(from : address indexed) (to: address indexed) (value: uint)
+  | Approval(owner: address indexed) (spender: address indexed) (value: uint)
+```
 
 The fact that several lines are grouped into a single declaration is not significant, there is only a single name space for event names so the same declaration could equivalently be written:
 
+```ocaml
 event
-
-Transfer(from : address indexed) (to: address indexed) (value: uint)
+  Transfer(from : address indexed) (to: address indexed) (value: uint)
 
 event
-
-Approval(owner: address indexed) (spender: address indexed) (value: uint)
+  Approval(owner: address indexed) (spender: address indexed) (value: uint)
+```
 
 ### Object and Layer signatures
 
@@ -340,25 +336,21 @@ In order to make proofs about programs more tractable, methods can not call arbi
 
 A signature can be given as a list of method declarations between curly braces, separated by semicolons.It is also possible to define a name for a signature with the syntax
 
-object signature _name_ = _signature_expression_
-
-For example,
-
+```ocaml
 object signature ERC20Interface = {
-
-transfer : addr \* int -> bool;
-
-const totalSupply : unit -> int;
-
-const balanceOf : addr -> int
-
+  transfer : addr * int -> bool;
+  const totalSupply : unit -> int;
+  const balanceOf : addr -> int
 }
+```
 
 In the rest of the file, the name ERC20Interface can be used wherever the curly-brace expression could. In addition to curly-brace lists and names, signature expression can also use minus-expressions to delete an item from a signature.
 
+```ocaml
 object signature ERC20Interface2 = ERC20Interface - totalSupply
 
 object signature ERC20Interface3 = ERC20Interface - {totalSupply; balanceOf}
+```
 
 As shown above, a method can be annotated as _const_, and if so the typechecker enforces that it does not modify the contract state. When generating contract ABI descriptions, the compiler marks const functions as “view”, which means they can run them on a local node without creating a transaction, so this feature is useful for interactiving with contracts in practice.
 
@@ -370,11 +362,11 @@ layer signature _name_ = _layer_signature_expression_
 
 For example,
 
+```ocaml
 layer signature FIXEDSUPPLYTOKENSig = {
-
-fixedSupplyToken : ERC20Interface
-
+  fixedSupplyToken : ERC20Interface
 }
+```
 
 ### Objects
 
@@ -382,35 +374,27 @@ Most of a DeepSEA program consists of object definitions. Each object consists o
 
 Here is an example object definition.
 
-object Pausable (ownable : OwnableInterface) : PausableInterface {
+```ocaml
+object Pausable (ownable : OwnableInterface) : PausableInterface  {
+  let paused : bool  = false;
 
-let paused : bool = false;
-
-let whenPaused () =
-
+  let whenPaused () =
     assert (paused = true)
 
-let whenNotPaused () =
-
+  let whenNotPaused () =
     assert (paused = false)
 
-let pause () =
-
+  let pause () =
     ownable.onlyOwner();
-
     pause := true;
-
     emit Pause
 
-let unpause () =
-
+  let unpause () =
     ownable.onlyOwner();
-
     pause := false;
-
     emit Unpause
-
 }
+```
 
 The first line gives the name of the object, Pausable, followed by a declaration of what objects we assume that the layer below provides. Inside the parenthesis can be either a layer signature expression (e.g. a layer signature name), or we can give a comma-separated list of objects and their object signatures (as above, with a single object). Finally, after the colon we specify what object signature this object satisfies.
 
@@ -427,79 +411,75 @@ If a method does not need any arguments, it can be declared as having type unit-
 
 Layers can be declared with the syntax
 
-layer _name_ = _layer_expression_
+> layer _name_ = _layer_expression_
 
 or
 
-layer _name _: [_signature_] _signature_ = _layer_expression_
+> layer _name_: [_signature_] _signature_ = _layer_expression_
 
 The signature inside the square brackets is the signature of the layer underneath, and the second signature is the signature of the layer currently being defined. If the layer does not depend on anything else, this signature can be an empty set of square brackets.
 
 There are two kinds of commonly used layer expressions. First, a semicolon-separated list in curly braces which links each object name specified in the signature with an implementing objects, like so:
 
-layer OWNABLE : [ { } ] { ownable : OwnableInterface } = {
-
-ownable = Ownable
-
+```ocaml
+layer OWNABLE : [ { } ] { ownable : OwnableInterface }  = {
+  ownable = Ownable
 }
 
 layer PAUSABLE : [{ ownable : OwnableInterface }]
-
                  { pausable : PausableInterface }
-
 = {
-
-pausable = Pausable
-
+  pausable = Pausable
 }
+```
 
 Second, the syntax the L1@L2 means putting L1 on top of L2. The signature of L2 should match the signature that L1 expects (but it can provide additional items). A DeepSEA program typically ends by composing all the layers together into a single object:
 
+```ocaml
 layer CONTRACT = TOKEN @ PAUSABLE @ OWNABLE
+```
 
 The final layer in the file will be compiled into the contract.
 
 ### Initializers and Constructors
 
-In the preview release, initializers and constructors are not yet implemented. The initializer expressions are ignored, every compiled contract is given a no-op EVM constructor which only uploads the code without any initialization, and all object fields are left at the ethereum default value. In the meantime, for testing purposes one can add an initialization method and manually call that after uploading the contract.
+:exclamation: In the preview release, initializers and constructors are not yet implemented. The initializer expressions are ignored, every compiled contract is given a no-op EVM constructor which only uploads the code without any initialization, and all object fields are left at the ethereum default value. In the meantime, for testing purposes one can add an initialization method and manually call that after uploading the contract.
 
 The DeepSEA compiler generates code to initialize the object fields when a contract is uploaded. When you declare a field in an object, the syntax is
 
-Let f*ieldname* : _type _:= _initializer_
+> let fieldname : type := initializer
 
-and the right hand side specifies the initial value. There is also a provision for adding arbitrary code to the contract constructor, in order to do more complicated forms of initialization. \_ \_
+and the right hand side specifies the initial value. There is also a provision for adding arbitrary code to the contract constructor, in order to do more complicated forms of initialization.
 
 #### Initializers
 
 The initial values that can be written on the right-hand-side depends on the type of the field. For booleans and integers one can write an ordinary literal expression:
 
+```ocaml
 let a : bool := true
-
 let b : int := 42
-
 let c : uint := 0u42
+```
 
 For arrays and hash mappings, the special (dummy) initializers _array_init_ and _mapping_init_ are used. These leave the field with the EVM default value, e.g. an array or mapping of zeros for an integer array.
 
+```ocaml
 let apool : array[64] int := array_init
-
 let balances : mapping[addr] int := mapping_init
+```
 
 Struct types can be initialized using curly-braces notation:
 
+```ocaml
 type Token = {
-
-    totalSupply : int;
-
-    owner : addr
-
+  totalSupply : int;
+  owner : addr
 }
 
 object O : OS {
-
-    let token : Token := { totalSupply=0; owner=0 }
-
+  let token : Token := { totalSupply=0; owner=0 }
 }
+```
 
 #### Constructors
 
@@ -513,13 +493,16 @@ Like many programming languages, the grammar distinguished between expressions a
 
 Integers of type int can be written in decimal or hexadecimal, e.g.
 
+```ocaml
 x := 42;
-
 y := 0x2a
+```
 
 Integers of type uint can be written with a leading 0u, e.g.
 
+```ocaml
 z := 0u42
+```
 
 (Recall that both int and uint are unsigned, the difference is whether numbers are allowed to overflow or not.)
 
@@ -527,53 +510,44 @@ z := 0u42
 
 Arithmetic operations are supported on int and uint expressions:
 
--e (_ negate a number _)
-
-e1 + e2 (_ addition _)
-
-e1 - e2 (_ subtraction _)
-
-e1 _ e2 (_ multiplication \*)
-
-e1 / e2 (_ division _)
-
-e1 mod e2 (_ remainder _)
+```ocaml
+-e  (* negate a number *)
+e1 + e2    (* addition *)
+e1 - e2    (* subtraction *)
+e1 * e2    (* multiplication *)
+e1 / e2    (* division *)
+e1 mod e2  (* remainder *)
+```
 
 Bitwise operations are supported only on uints:
 
-~e (_ bitwise not _)
-
-e1 || e2 (_ bitwise or _)
-
-e1 ^ e2 (_ bitwise xor _)
-
-e1 & e2 (_ bitwise and _)
-
-e1 << e2 (_ shift left _)
-
-e1 >> e2 (_ shift right _)
+```ocaml
+~e         (* bitwise not *)
+e1 || e2   (* bitwise or *)
+e1 ^ e2    (* bitwise xor *)
+e1 & e2    (* bitwise and *)
+e1 << e2   (* shift left *)
+e1 >> e2   (* shift right *)
+```
 
 Comparison operators produce booleans:
 
-e1 = e2 (_ equality test _)
-
-e1 <> e2 (_ not equal _)
-
-e1 < e2 (_ less than _)
-
-e1 <= e2 (_ less than or equal _)
-
-e1 > e2 (_ greater than _)
-
-e1 >= e2 (_ greater than or equal _)
+```ocaml
+e1 = e2    (* equality test *)
+e1 <> e2   (* not equal *)
+e1 < e2    (* less than *)
+e1 <= e2   (* less than or equal *)
+e1 > e2    (* greater than *)
+e1 >= e2   (* greater than or equal *)
+```
 
 Logical operators supported on boolean expressions:
 
-!e (_ not _)
-
-e1 /\ e2 (_ and _)
-
-e1 \/ e2 (_ or _)
+```ocaml
+!e  (* not *)
+e1 /\ e2   (* and *)
+e1 \/ e2   (* or *)
+```
 
 #### Integer overflow
 
@@ -585,47 +559,40 @@ Expressions of type _uint_ are allowed to overflow, which is suitable for e.g. b
 
 The following expressions expose information about the current Ethereum transaction. As the language develops, we will extend this functionality to be more complete.
 
-this*address (* like address(this) in Solidity, address of this contract \_)
-
-tx*origin (* like tx.origin in Solidity. \_)
-
-msg*sender (* like msg.sender in Solidity \_)
-
-Msg*value (* like msg.value in Solidity, the value of this message in Wei. \_)
-
-Block*coinbase (* like block.coinbase in Solidity, address of the current block’s miner \_)
-
-Block*timestamp (* like block.timestamp in Solidity, current block's Unix timestamp in seconds \_)
-
-Block*number (* like block.number in Solidity, current block's number \_)
+```ocaml
+this_address  (* like address(this) in Solidity, address of this contract *)
+tx_origin       (* like tx.origin in Solidity. *)
+msg_sender  (* like msg.sender in Solidity *)
+Msg_value    (* like msg.value in Solidity, the value of this message in Wei. *)
+Block_coinbase (* like block.coinbase in Solidity, address of the current block’s miner *)
+Block_timestamp (* like block.timestamp in Solidity, current block's Unix timestamp in seconds *)
+Block_number     (* like block.number in Solidity, current block's number *)
+```
 
 #### L-expressions
 
 Structs, arrays, and hashtables can be read and assigned to using “dot” and “square bracket” notation:
 
+```ocaml
 let x = in strct.fld1 in
-
 strct.fld2 := 3;
-
 let y = in arr[3] in
-
 arr[4] := 879;
-
 let z = in tbl[3] in
-
 tbl[4] := 879;
+```
 
-These expressions are called l-expressions (the L means “left”, since they can be on the left side of an assignement.) It is a quirk of the language that these expressions can not be directly used as part of larger expression, instead the programmer needs to use a let-statement to give a name to the value (as above).
+These expressions are called l-expressions (the L means “left”, since they can be on the left side of an assignment.) It is a quirk of the language that these expressions can not be directly used as part of larger expression, instead the programmer needs to use a let-statement to give a name to the value (as above).
 
 State variables in an object are also considered l-values, so accessing them similarly needs a let-statement:
 
-let \_totalSupply : int := 10000
+```ocaml
+let _totalSupply :  int := 10000
 
 let getTotalSupply () =
-
-let totalSupply = \_totalSupply in
-
-totalSupply
+  let totalSupply = _totalSupply in
+  totalSupply
+```
 
 Future versions of the language may omit the l-value restriction and allow them to be used freely as r-values.
 
@@ -641,33 +608,31 @@ where the expression can be either an ordinary expression or an l-expression. Th
 
 The **return value of a method** is the value of the last expression, e.g. the following method returns either true or false. (There is no provision for “early return” from a method.)
 
+```ocaml
 let decrement n =
-
-if (current >= n)
-
-then begin
-
+  if (current >= n)
+  then begin
     current := current - n;
-
     true
-
-end else
-
+  end else
     false
+```
 
 #### Assertions
 
 Assertions in DeepSEA work like assert/require statements in Solidity: if the assertion is not satisfied it reverts the transaction. An assert statement takes boolean expression as an argument, for example
 
-let onlyOwner () =
-
+```ocaml
+  let onlyOwner () =
     assert (msg_sender = owner)
+```
 
-It is also possible to use the keywords _deny \_and \_fail_:
+It is also possible to use the keywords _deny_ and _fail_:
 
-deny e (_ equivalent to (assert (!e)) _)
-
-fail (_ equivalent to (assert false) _)
+```ocaml
+deny e (* equivalent to (assert (!e)) *)
+fail      (* equivalent to (assert false) *)
+```
 
 In the generated specifications, asserts becomes a failure in the option monad; also asserted expressions are added as known assumptions when proving datatype verification conditions.
 
@@ -679,82 +644,80 @@ In order to keep the generated specifications simple, DeepSEA only provides boun
 
 The simplest kind of loop is a for-loop over a given range, which has the syntax
 
-for _var_ = _exp1_ to _exp2_ do _cmd_
+> for _var_ = _exp1_ to _exp2_ do _cmd_
 
 The variable ranges from exp1 (inclusive) to exp2 (exclusive). The type of the variable, and the expressions, is int. For example,
 
+```ocaml
 for i = 0 to 16 do
-
-a[i] := 2\*i;
+   a[i] := 2*i;
+```
 
 ##### Fold/First-loops
 
 Although for-loops are fairly general, there is a limitation because DeepSEA statements can only affect storage variables. For efficiency, DeepSEA also provides special purpose support for certain idioms which can be computed using only stack variables.
 
-The preview release only implements for-loops, and other loop types will be added in the future.
+:exclamation: The preview release only implements for-loops, and other loop types will be added in the future.
 
 #### Calls to lower layers
 
-If one of the objects in the lower layer is named o, and that object contains a method named f, then we can call the method with the syntax o.f(arg1, … argn).
+If one of the objects in the lower layer is named o, and that object contains a method named f, then we can call the method with the syntax `o.f(arg1, … argn)`.
 
-object Upper (lower : LowerInterface) : UpperInterface {
-
-let f () =
-
+```ocaml
+object Upper (lower : LowerInterface) : UpperInterface  {
+  let f () =
     lower.incr();
-
     lower.incr()
-
 }
+```
 
 The method call may have side effects, and it may also return a return value. In the latter case it counts as an l-expression, so it also needs a let-expression.
 
-let n = lower.get() in
-
+```ocaml
+ let n = lower.get() in
     n
+```
 
-In the preview release function calling conventions are still not completely implemented, so function calls to lower layers may be incorrectly compiled.
+:exclamation: In the preview release function calling conventions are still not completely implemented, so function calls to lower layers may be incorrectly compiled.
 
 #### Constructing/matching values of algebraic data types
 
 Once one has declared an algebraic datatype (see above), it is possible to create values of it by mentioning the datatype constructors. E.g. given the declaration
 
+```ocaml
 type Status [[int]] =
-
-| Ok [[= 0]]
-
-| Triggered [[= 1]]
-
-| Finalized [[= 2]]
+  | Ok        [[= 0]]
+  | Triggered [[= 1]]
+  | Finalized [[= 2]]
+```
 
 we can assign it to a field, or make a value using
 
-    let x = Ok in ...
+```ocaml
+let x = Ok in ...
+```
 
 Note that constructors are considered L-expressions, so they need a let-statement to be embedded in other expressions.
 
 Similarly, we can do a case statement on values using the _match … with … end_ command:
 
-    let v = match x with
-
-    | Ok =>
-
-       40
-
-    | Triggered =>
-
-       41
-
-    | Finalized =>
-
-       42
-
-    end
+```ocaml
+let v = match x with
+| Ok =>
+    40
+| Triggered =>
+    41
+| Finalized =>
+    42
+end
+```
 
 #### Generating Ethereum events
 
-Ethereum events are not implemented in this preview release.
+:exclamation: Ethereum events are not implemented in this preview release.
 
 Once an event has been declared (see above), it can be generated with the “emit” command.
 
+```ocaml
 emit OwnershipTransferred(owner, newOwner);
+```
