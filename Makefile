@@ -2,7 +2,7 @@
 # brew install gnu-sed
 # brew install pandoc
 
-NAME=language-reference
+NAME="DeepSEA language reference"
 
 pdf:
 	make tex
