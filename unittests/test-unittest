@@ -12,16 +12,16 @@ async function deploy(bytecodeFilename, abi, testFunctions, verbose=false) {
   const signer = provider.getSigner(0);
   const creator = signer.getAddress();
 
-  console.log("sending creation transaction...")
+  //console.log("sending creation transaction...")
   let factory = new ethers.ContractFactory(abi, bytecode, signer);
   let contract = await factory.deploy();
   await contract.deployed();
-  console.log("contract address: " + contract.address);
-  console.log("transaction hash: " + contract.deployTransaction.hash);
+  //console.log("contract address: " + contract.address);
+  //console.log("transaction hash: " + contract.deployTransaction.hash);
   let deployedBytecode = await provider.getCode(contract.address);
-  console.log("deployed bytecode: " + deployedBytecode);
+  //console.log("deployed bytecode: " + deployedBytecode);
 
-  console.log("\nTesting function calls...\n");
+  //console.log("\nTesting function calls...\n");
 
   for (const func of testFunctions) {
     
