@@ -1,3 +1,7 @@
+# On Mac:
+# brew install gnu-sed
+# brew install pandoc
+
 NAME=language-reference
 
 pdf:
