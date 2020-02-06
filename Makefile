@@ -14,6 +14,9 @@ tex:
 	gsed -i '/.*hypertarget{introduction}.*/i \
 		\\\tableofcontents' \
 		${NAME}.tex
+	gsed -i 's/:exclamation:/ \
+		{\\fontencoding{U}\\fontfamily{futs}\\selectfont\\char 66\\relax}/' \
+		${NAME}.tex
 	pdflatex ${NAME}.tex
 	pdflatex ${NAME}.tex
 
