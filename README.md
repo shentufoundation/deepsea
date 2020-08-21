@@ -1,4 +1,6 @@
-# Preview of the DeepSEA Language
+# The DeepSEA Language
+
+Version 1.0 binary release.
 
 You can download a zip file from the [releases page](https://github.com/CertiKProject/deepsea-preview/releases). Please see the [DeepSEA language reference](https://github.com/CertiKProject/deepsea-preview/blob/master/DeepSEA%20language%20reference.pdf) for installation and usage instructions.  
 
