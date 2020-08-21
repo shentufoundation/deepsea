@@ -1,0 +1,119 @@
+type addr := int
+
+type Test_struct = {
+  ts_int_val : int;
+  ts_addr_val : addr
+}
+
+object signature LowerInterface = {
+  constructor : int -> unit;
+  test_val : unit -> unit;
+  const get_x : unit -> int;
+  const get_y : unit -> uint;
+  const get_temp_val : unit -> int 
+}
+
+object Lower : LowerInterface {
+  let x : int := 6
+  let y : uint := 0u123
+  let temp_val : int := 1
+
+  let constructor y = 
+     let temp_test_val = 2 in
+      temp_val := temp_test_val;
+     x := y
+
+  let test_val () = 
+    let a = x in
+      assert(a = 6)
+
+  let get_x () =
+    let _x = x in
+      _x
+
+  let get_y () =
+    let _y = y in
+      _y 
+
+  let get_temp_val () =
+    let _temp_val = temp_val in
+    _temp_val
+}
+
+layer LOWER : [ { } ] { lower : LowerInterface }  = {
+  lower = Lower
+}
+
+object signature UpperInterface = {
+  constructor : int -> unit;
+  const get : unit -> unit
+}
+
+object Upper (lower : LowerInterface) : UpperInterface  {
+  let int_val : int := 10
+  let uint_val : uint := 0u10
+  let bool_val : bool := false
+  let address_val : address := address(0xefca)
+  let mapping_val : mapping[address] uint := mapping_init
+  let array_val : array[64] int := array_init
+  let struct_val : Test_struct := { ts_int_val=5; ts_addr_val=6 }
+  let hash_val : hashvalue := null_hash
+  let constructor_int_val : int := 123
+  let constructor_temp_intval : int := 1234
+
+  let constructor z =
+      let temp_test_int = 20 in
+        constructor_temp_intval := temp_test_int;
+      constructor_int_val := z
+
+  let get () =
+   let a = uint_val in 
+      assert(a = 0u10);
+
+    let b = int_val in
+      assert(b = 10);
+
+    let c = bool_val in
+      assert(c = false);
+
+    let d = address_val in
+      assert(d = address(0xefca));
+
+    let e = mapping_val[msg_sender] in
+      assert(e = 0u0);
+
+    let f = array_val[0] in
+      assert(f = 0);
+
+    let i = struct_val.ts_int_val in
+      assert(i = 5);
+
+    let j = struct_val.ts_addr_val in
+      assert(j = 6);
+
+    let l = lower.get_y() in
+      assert(l = 0u123);
+
+    (* in lower layer, the x value firstly initialize as 6, and update in constructor to 100 by input argument *)
+    let g = lower.get_x() in
+      assert(g = 100);
+
+    (* the constructor code overwrite the initializer's value, should be 321 here by input argument *)
+    let k = constructor_int_val in
+      assert(k = 321);
+
+    let o = constructor_temp_intval in
+      assert(o = 20);
+
+    let m = lower.get_temp_val() in
+      assert(m = 2)
+
+}
+
+layer UPPER : [{ lower : LowerInterface }]
+    { upper : UpperInterface    }
+= {
+  upper = Upper
+}
+
+layer CONTRACT = UPPER @ LOWER

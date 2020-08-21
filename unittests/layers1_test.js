@@ -2,8 +2,8 @@
 
 unittest = require("./test-unittest");
 
-const bytecodeFilename = "match-int.bytecode";
-const abiFilename = "match-int.abi";
+const bytecodeFilename = "layers1.bytecode";
+const abiFilename = "layers1.abi";
 
 const testFunctions = [{name: "f", args: [], expectSuccess: true}];
 

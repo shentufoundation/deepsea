@@ -3,39 +3,45 @@
 const fs = require('fs');
 const ethers = require("ethers");
   
-async function deploy(bytecodeFilename, abi, testFunctions, verbose=false) {
+async function deploy(bytecodeFilename, abiFilename, testFunctions, constructorArgs=[], verbose=false) {
 
   const endpoint = "http://localhost:8545";
   const provider = new ethers.providers.JsonRpcProvider(endpoint);
   
   const bytecode = fs.readFileSync(bytecodeFilename).toString().replace(/\n|\t|\r| /g, "");
+  const abi = JSON.parse(fs.readFileSync(abiFilename).toString());
+
   const signer = provider.getSigner(0);
   const creator = signer.getAddress();
 
   //console.log("sending creation transaction...")
   let factory = new ethers.ContractFactory(abi, bytecode, signer);
-  let contract = await factory.deploy();
+    // TODO: params. For now, when testing constructor, using 100, 321
+  let contract = await (factory.deploy.apply(factory,constructorArgs));
   await contract.deployed();
   //console.log("contract address: " + contract.address);
   //console.log("transaction hash: " + contract.deployTransaction.hash);
-  let deployedBytecode = await provider.getCode(contract.address);
+  //let deployedBytecode = await provider.getCode(contract.address);
   //console.log("deployed bytecode: " + deployedBytecode);
 
-  //console.log("\nTesting function calls...\n");
-
-  for (const func of testFunctions) {
-    
-    await contract[func.name].apply(null, func.args).then((result) => {
-
-      if (func.expectSuccess)  console.log(func.name + ": pass");
-      else                     console.log(func.name + ": fail");
+  for (const func of testFunctions) {    
+      await contract[func.name].apply(null, func.args).then((result) => {
+	  if (func.expectValue) {
+	      if (result == func.expectValue)
+		  console.log(func.name + ": pass✅ (with correct value)");
+	      else
+		  console.log(func.name + ": fail❌ (expected "
+			      + func.expectValue
+			      + " but got " + result + ")");
+	  } else if (func.expectSuccess)  console.log(func.name + ": pass✅");
+	  else                     console.log(func.name + ": fail❌");
 
       if (verbose)  console.log(JSON.stringify(result, null, 2));
 
     }, (error) => {
 
-      if (!func.expectSuccess)  console.log(func.name + ": pass"); 
-      else                      console.log(func.name + ": fail"); 
+      if (!func.expectSuccess)  console.log(func.name + ": pass✅");
+      else                      console.log(func.name + ": fail❌");
 
       if (verbose)  console.log(JSON.stringify(error, null, 2));
 
