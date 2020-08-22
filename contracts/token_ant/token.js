@@ -12,7 +12,7 @@ const passphrase = "" //need to replace to custom client.key's password
 let opt = {
   host: '47.103.163.48',    //get from your free ant blockChain
   port: 18130,          //port number
-  timeout: 30000,      
+  timeout: 30000,
   cert: fs.readFileSync("./certs/client.crt", { encoding: "utf8" }), // client.crt
   ca: fs.readFileSync("./certs/ca.crt", { encoding: "utf8" }),      // ca.crt
   key: fs.readFileSync("./certs/client.key", { encoding: "utf8" }), // client key
@@ -23,7 +23,7 @@ let opt = {
   passphrase: passphrase
 }
 
-// initialize a connection 
+// initialize a connection
 const chain = Chain(opt)
 
 /////////////this code is used for create a new account////////////////////////////////
@@ -37,7 +37,7 @@ const chain = Chain(opt)
 //   from: 'Tester001',                                                 ///////////////
 //   to: newAccountName,                                                ///////////////
 //   data: {                                                            ///////////////
-//     recover_key: '0x'+ newKey.publicKey.toString('hex'),             ///////////////          
+//     recover_key: '0x'+ newKey.publicKey.toString('hex'),             ///////////////
 //     auth_key: '0x'+ newKey.publicKey.toString('hex'),                ///////////////
 //     auth_weight: 100                                                 ///////////////
 //   }                                                                  ///////////////
@@ -63,7 +63,7 @@ const chain = Chain(opt)
 //                                                                      ///////////////
 ///////////////////////////////////////////////////////////////////////////////////////
 
-// ./dsc contracts/token/token.ds abi
+// ./dsc_antchain contracts/token/token.ds abi
 const abi = [ {"type":"constructor",
    "name":"constructor",
    "inputs":[],
@@ -80,14 +80,14 @@ const abi = [ {"type":"constructor",
    "stateMutability":"view"},
  {"type":"function",
    "name":"balanceOf",
-   "inputs":[{"name":"tokenOwner", "type":"address"}],
+   "inputs":[{"name":"tokenOwner", "type":"identity"}],
    "outputs":[{"name":"", "type":"uint256"}],
    "payable":false,
    "constant":true,
    "stateMutability":"view"},
  {"type":"function",
    "name":"transfer",
-   "inputs":[{"name":"toA", "type":"address"},{"name":"tokens", "type":"uint256"}],
+   "inputs":[{"name":"toA", "type":"identity"},{"name":"tokens", "type":"uint256"}],
    "outputs":[{"name":"", "type":"bool"}],
    "payable":true,
    "constant":false,
@@ -95,7 +95,7 @@ const abi = [ {"type":"constructor",
 
 const bytecode = fs.readFileSync(process.argv[2]).toString().replace(/\n|\t|\r| /g, "");
 
-// add date to make sure there is no duplicate hash 
+// add date to make sure there is no duplicate hash
 const contractName = 'contract'+Date.now()
 // initalize a contract example
 let myContract = chain.ctr.contract(contractName, abi)
@@ -110,7 +110,7 @@ myContract.new(bytecode, {
      }, (err, output, data) => {
        // console.log("contract call error: ", err)
        // console.log('contract call data: :', data)
-       console.log('contract call output:', output) 
+       console.log('contract call output:', output)
       // replace fake identity by a real identity, example: 0xc60a9d48105950a0cca07a4c6320b98c303ad42d694a634529e8e1a0a16fcdb5
       myContract.balanceOf(('fake identity') , {
           from: ''
