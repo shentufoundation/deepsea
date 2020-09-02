@@ -1,0 +1,9 @@
+true: debug
+# In order to produce an image that doesn't dynamically link gmp, first
+# compile a static version of libgmp.a (on recent versions of macos this
+# apaprently requires configuring gmp with --disable-assembly), then
+# recompile the ocaml zarith module from source and link it statically,
+# and then uncomment this line:
+#true: ccopt(-Wl,/usr/local/lib/libgmp.a)
+
+<backend/extraction/*.cmx>: for-pack(Backend)

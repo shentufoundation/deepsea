@@ -1,0 +1,11 @@
+opam-version: "2.0"
+name: "deepsea-dependencies"
+maintainer: "Vilhelm Sjöberg <vilhelm.sjoberg@certik.io>"
+description: ""
+depends: [ "ocaml"           { = "4.09.0"    }
+           "menhir"          { >= "20200612" }
+           "cryptokit"       { >= "1.14"     }
+           "cppo"            { = "1.6.6"     }
+           "cppo_ocamlbuild" { = "1.6.6"     }
+]
+
