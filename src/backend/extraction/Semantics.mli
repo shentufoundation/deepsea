@@ -1,18 +1,30 @@
 open AST
+open Ctypes
 open Datatypes
 open Globalenvs
-open Labels
-open Language0
-open List0
 open Maps0
-open Specif
+open StmtClinear
 
-val label_code : code -> label list
+type bblock = statement list
 
-val label_function : coq_function -> bool
+type code = bblock PTree.t
 
-val xlabel_functions : coq_function option list -> bool
+type coq_function = { fn_return : coq_type;
+                      fn_params : (ident, coq_type) prod list;
+                      fn_temps : (ident, coq_type) prod list;
+                      fn_locals : (ident, coq_type) prod list;
+                      fn_code : code; fn_entrypoint : label }
 
-val label_functions : coq_function PTree.t -> bool
+val fn_return : coq_function -> coq_type
 
-val label_methods : coq_function option IntMap.t -> bool
+val fn_params : coq_function -> (ident, coq_type) prod list
+
+val fn_temps : coq_function -> (ident, coq_type) prod list
+
+val fn_locals : coq_function -> (ident, coq_type) prod list
+
+val fn_code : coq_function -> code
+
+val fn_entrypoint : coq_function -> label
+
+type genv = (coq_function, coq_type) Genv.t

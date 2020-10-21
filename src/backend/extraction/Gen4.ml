@@ -1,918 +1,194 @@
 open AST
 open Ascii
-open BinNums
-open Cop
-open Ctypes
 open Datatypes
 open Globalenvs
 open Integers
-open Language2
-open Language
-open Language0
+open Labels
 open List0
 open Maps0
-open MemoryModel
 open Monad
-open Nat0
 open OptErrMonad
 open Options
-open Semantics
+open Semantics0
+open StmtClinear
 open String0
-open TempModel
 open Trees
 
-(** val stacked_expr :
-    nat PTree.t -> Language.expr -> nat -> bool -> statement list optErr **)
+(** val nodes_in_code : code -> label list **)
 
-let rec stacked_expr temps e s_extra rvalue =
-  match e with
-  | Econst_int (_, _) ->
-    Error (String ((Ascii (Coq_true, Coq_true, Coq_false, Coq_false,
-      Coq_false, Coq_false, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
-      Coq_false, Coq_false, Coq_false, Coq_false, Coq_true, Coq_true,
-      Coq_false)), (String ((Ascii (Coq_false, Coq_true, Coq_true, Coq_true,
-      Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
-      Coq_true, Coq_true, Coq_true, Coq_false, Coq_true, Coq_true,
-      Coq_false)), (String ((Ascii (Coq_true, Coq_true, Coq_true, Coq_true,
-      Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
-      Coq_false, Coq_true, Coq_false, Coq_true, Coq_true, Coq_true,
-      Coq_false)), (String ((Ascii (Coq_false, Coq_false, Coq_false,
-      Coq_false, Coq_false, Coq_true, Coq_false, Coq_false)), (String ((Ascii
-      (Coq_true, Coq_true, Coq_false, Coq_false, Coq_false, Coq_true,
-      Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_true, Coq_true,
-      Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-      (Coq_true, Coq_false, Coq_true, Coq_true, Coq_false, Coq_true,
-      Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
-      Coq_false, Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)),
-      (String ((Ascii (Coq_true, Coq_false, Coq_false, Coq_true, Coq_false,
-      Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
-      Coq_true, Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)), (String
-      ((Ascii (Coq_true, Coq_false, Coq_true, Coq_false, Coq_false, Coq_true,
-      Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
-      Coq_false, Coq_false, Coq_false, Coq_true, Coq_false, Coq_false)),
-      (String ((Ascii (Coq_true, Coq_true, Coq_false, Coq_false, Coq_true,
-      Coq_true, Coq_false, Coq_false)), (String ((Ascii (Coq_false, Coq_true,
-      Coq_false, Coq_false, Coq_true, Coq_true, Coq_false, Coq_false)),
-      (String ((Ascii (Coq_true, Coq_false, Coq_true, Coq_true, Coq_false,
-      Coq_true, Coq_false, Coq_false)), (String ((Ascii (Coq_false, Coq_true,
-      Coq_false, Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)),
-      (String ((Ascii (Coq_true, Coq_false, Coq_false, Coq_true, Coq_false,
-      Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
-      Coq_true, Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)), (String
-      ((Ascii (Coq_false, Coq_false, Coq_false, Coq_false, Coq_false,
-      Coq_true, Coq_false, Coq_false)), (String ((Ascii (Coq_true, Coq_false,
-      Coq_false, Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)),
-      (String ((Ascii (Coq_false, Coq_true, Coq_true, Coq_true, Coq_false,
-      Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
-      Coq_true, Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)), (String
-      ((Ascii (Coq_false, Coq_false, Coq_false, Coq_false, Coq_false,
-      Coq_true, Coq_false, Coq_false)), (String ((Ascii (Coq_true, Coq_true,
-      Coq_false, Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)),
-      (String ((Ascii (Coq_true, Coq_true, Coq_true, Coq_true, Coq_false,
-      Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_true,
-      Coq_true, Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)), (String
-      ((Ascii (Coq_true, Coq_true, Coq_false, Coq_false, Coq_true, Coq_true,
-      Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false, Coq_true,
-      Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-      (Coq_true, Coq_false, Coq_false, Coq_false, Coq_false, Coq_true,
-      Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_true, Coq_true,
-      Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-      (Coq_false, Coq_false, Coq_true, Coq_false, Coq_true, Coq_true,
-      Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_true, Coq_false,
-      Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)),
-      EmptyString))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
-  | Language.Econst_int256 (i, _) ->
-    (match rvalue with
-     | Coq_true ->
-       ret (Obj.magic coq_Monad_optErr) (Coq_cons ((Srvalue (Econst_int256
-         i)), Coq_nil))
-     | Coq_false ->
-       Error (String ((Ascii (Coq_true, Coq_false, Coq_false, Coq_false,
-         Coq_false, Coq_false, Coq_true, Coq_false)), (String ((Ascii
-         (Coq_false, Coq_false, Coq_true, Coq_false, Coq_true, Coq_true,
-         Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
-         Coq_true, Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)),
-         (String ((Ascii (Coq_true, Coq_false, Coq_true, Coq_false,
-         Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-         (Coq_true, Coq_false, Coq_true, Coq_true, Coq_false, Coq_true,
-         Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
-         Coq_false, Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)),
-         (String ((Ascii (Coq_false, Coq_false, Coq_true, Coq_false,
-         Coq_true, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-         (Coq_false, Coq_false, Coq_false, Coq_false, Coq_false, Coq_true,
-         Coq_false, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
-         Coq_true, Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)),
-         (String ((Ascii (Coq_true, Coq_true, Coq_true, Coq_true, Coq_false,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
-         Coq_false, Coq_false, Coq_false, Coq_false, Coq_true, Coq_false,
-         Coq_false)), (String ((Ascii (Coq_true, Coq_true, Coq_false,
-         Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)), (String
-         ((Ascii (Coq_true, Coq_true, Coq_true, Coq_true, Coq_false,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
-         Coq_false, Coq_true, Coq_true, Coq_false, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_false, Coq_false, Coq_false,
-         Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)), (String
-         ((Ascii (Coq_true, Coq_false, Coq_false, Coq_true, Coq_false,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
-         Coq_false, Coq_true, Coq_true, Coq_false, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_true, Coq_false, Coq_true,
-         Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)), (String
-         ((Ascii (Coq_false, Coq_false, Coq_false, Coq_false, Coq_false,
-         Coq_true, Coq_false, Coq_false)), (String ((Ascii (Coq_true,
-         Coq_false, Coq_false, Coq_false, Coq_false, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_false, Coq_true, Coq_true,
-         Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)), (String
-         ((Ascii (Coq_false, Coq_false, Coq_false, Coq_false, Coq_false,
-         Coq_true, Coq_false, Coq_false)), (String ((Ascii (Coq_false,
-         Coq_true, Coq_false, Coq_false, Coq_true, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_true, Coq_false, Coq_true,
-         Coq_true, Coq_false, Coq_true, Coq_false, Coq_false)), (String
-         ((Ascii (Coq_false, Coq_true, Coq_true, Coq_false, Coq_true,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
-         Coq_false, Coq_false, Coq_false, Coq_false, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_false, Coq_false, Coq_true,
-         Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)), (String
-         ((Ascii (Coq_true, Coq_false, Coq_true, Coq_false, Coq_true,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
-         Coq_false, Coq_true, Coq_false, Coq_false, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_false, Coq_false, Coq_false,
-         Coq_false, Coq_false, Coq_true, Coq_false, Coq_false)), (String
-         ((Ascii (Coq_true, Coq_false, Coq_false, Coq_false, Coq_false,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
-         Coq_true, Coq_false, Coq_false, Coq_true, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_false, Coq_false, Coq_false,
-         Coq_false, Coq_false, Coq_true, Coq_false, Coq_false)), (String
-         ((Ascii (Coq_false, Coq_false, Coq_true, Coq_true, Coq_false,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
-         Coq_false, Coq_true, Coq_true, Coq_false, Coq_true, Coq_false,
-         Coq_false)), (String ((Ascii (Coq_false, Coq_true, Coq_true,
-         Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)), (String
-         ((Ascii (Coq_true, Coq_false, Coq_false, Coq_false, Coq_false,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
-         Coq_false, Coq_true, Coq_true, Coq_false, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_true, Coq_false, Coq_true,
-         Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)), (String
-         ((Ascii (Coq_true, Coq_false, Coq_true, Coq_false, Coq_false,
-         Coq_true, Coq_true, Coq_false)),
-         EmptyString)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
-  | Language.Evar (i, _) ->
-    (match rvalue with
-     | Coq_true ->
-       Error (String ((Ascii (Coq_true, Coq_false, Coq_false, Coq_false,
-         Coq_false, Coq_false, Coq_true, Coq_false)), (String ((Ascii
-         (Coq_false, Coq_false, Coq_true, Coq_false, Coq_true, Coq_true,
-         Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
-         Coq_true, Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)),
-         (String ((Ascii (Coq_true, Coq_false, Coq_true, Coq_false,
-         Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-         (Coq_true, Coq_false, Coq_true, Coq_true, Coq_false, Coq_true,
-         Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
-         Coq_false, Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)),
-         (String ((Ascii (Coq_false, Coq_false, Coq_true, Coq_false,
-         Coq_true, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-         (Coq_false, Coq_false, Coq_false, Coq_false, Coq_false, Coq_true,
-         Coq_false, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
-         Coq_true, Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)),
-         (String ((Ascii (Coq_true, Coq_true, Coq_true, Coq_true, Coq_false,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
-         Coq_false, Coq_false, Coq_false, Coq_false, Coq_true, Coq_false,
-         Coq_false)), (String ((Ascii (Coq_true, Coq_true, Coq_false,
-         Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)), (String
-         ((Ascii (Coq_true, Coq_true, Coq_true, Coq_true, Coq_false,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
-         Coq_false, Coq_true, Coq_true, Coq_false, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_false, Coq_false, Coq_false,
-         Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)), (String
-         ((Ascii (Coq_true, Coq_false, Coq_false, Coq_true, Coq_false,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
-         Coq_false, Coq_true, Coq_true, Coq_false, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_true, Coq_false, Coq_true,
-         Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)), (String
-         ((Ascii (Coq_false, Coq_false, Coq_false, Coq_false, Coq_false,
-         Coq_true, Coq_false, Coq_false)), (String ((Ascii (Coq_true,
-         Coq_false, Coq_false, Coq_false, Coq_false, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_false, Coq_true, Coq_true,
-         Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)), (String
-         ((Ascii (Coq_false, Coq_false, Coq_false, Coq_false, Coq_false,
-         Coq_true, Coq_false, Coq_false)), (String ((Ascii (Coq_false,
-         Coq_true, Coq_false, Coq_false, Coq_true, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_true, Coq_false, Coq_true,
-         Coq_true, Coq_false, Coq_true, Coq_false, Coq_false)), (String
-         ((Ascii (Coq_false, Coq_true, Coq_true, Coq_false, Coq_true,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
-         Coq_false, Coq_false, Coq_false, Coq_false, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_false, Coq_false, Coq_true,
-         Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)), (String
-         ((Ascii (Coq_true, Coq_false, Coq_true, Coq_false, Coq_true,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
-         Coq_false, Coq_true, Coq_false, Coq_false, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_false, Coq_false, Coq_false,
-         Coq_false, Coq_false, Coq_true, Coq_false, Coq_false)), (String
-         ((Ascii (Coq_true, Coq_false, Coq_false, Coq_false, Coq_false,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
-         Coq_true, Coq_false, Coq_false, Coq_true, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_false, Coq_false, Coq_false,
-         Coq_false, Coq_false, Coq_true, Coq_false, Coq_false)), (String
-         ((Ascii (Coq_false, Coq_false, Coq_true, Coq_true, Coq_false,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
-         Coq_false, Coq_true, Coq_true, Coq_false, Coq_true, Coq_false,
-         Coq_false)), (String ((Ascii (Coq_false, Coq_true, Coq_true,
-         Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)), (String
-         ((Ascii (Coq_true, Coq_false, Coq_false, Coq_false, Coq_false,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
-         Coq_false, Coq_true, Coq_true, Coq_false, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_true, Coq_false, Coq_true,
-         Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)), (String
-         ((Ascii (Coq_true, Coq_false, Coq_true, Coq_false, Coq_false,
-         Coq_true, Coq_true, Coq_false)),
-         EmptyString))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
-     | Coq_false ->
-       ret (Obj.magic coq_Monad_optErr) (Coq_cons ((Slvalue (Evar i)),
-         Coq_nil)))
-  | Language.Etempvar (i, _) ->
-    (match rvalue with
-     | Coq_true ->
-       bind (Obj.magic coq_Monad_optErr)
-         (fromOption (PTree.get i (Obj.magic temps)) (String ((Ascii
-           (Coq_true, Coq_true, Coq_false, Coq_false, Coq_false, Coq_true,
-           Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_true,
-           Coq_true, Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)),
-           (String ((Ascii (Coq_true, Coq_false, Coq_true, Coq_false,
-           Coq_true, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-           (Coq_false, Coq_false, Coq_true, Coq_true, Coq_false, Coq_true,
-           Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
-           Coq_true, Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)),
-           (String ((Ascii (Coq_false, Coq_false, Coq_false, Coq_false,
-           Coq_false, Coq_true, Coq_false, Coq_false)), (String ((Ascii
-           (Coq_false, Coq_true, Coq_true, Coq_true, Coq_false, Coq_true,
-           Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_true,
-           Coq_true, Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)),
-           (String ((Ascii (Coq_false, Coq_false, Coq_true, Coq_false,
-           Coq_true, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-           (Coq_false, Coq_false, Coq_false, Coq_false, Coq_false, Coq_true,
-           Coq_false, Coq_false)), (String ((Ascii (Coq_false, Coq_true,
-           Coq_true, Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)),
-           (String ((Ascii (Coq_true, Coq_false, Coq_false, Coq_true,
-           Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-           (Coq_false, Coq_true, Coq_true, Coq_true, Coq_false, Coq_true,
-           Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
-           Coq_true, Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)),
-           (String ((Ascii (Coq_false, Coq_false, Coq_false, Coq_false,
-           Coq_false, Coq_true, Coq_false, Coq_false)), (String ((Ascii
-           (Coq_false, Coq_false, Coq_true, Coq_false, Coq_true, Coq_true,
-           Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_false,
-           Coq_true, Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)),
-           (String ((Ascii (Coq_true, Coq_false, Coq_true, Coq_true,
-           Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-           (Coq_false, Coq_false, Coq_false, Coq_false, Coq_true, Coq_true,
-           Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_true,
-           Coq_true, Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)),
-           (String ((Ascii (Coq_true, Coq_false, Coq_false, Coq_false,
-           Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-           (Coq_false, Coq_true, Coq_false, Coq_false, Coq_true, Coq_true,
-           Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
-           Coq_false, Coq_false, Coq_false, Coq_true, Coq_false, Coq_false)),
-           (String ((Ascii (Coq_true, Coq_false, Coq_false, Coq_true,
-           Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-           (Coq_false, Coq_false, Coq_true, Coq_false, Coq_false, Coq_true,
-           Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_false,
-           Coq_true, Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)),
-           (String ((Ascii (Coq_false, Coq_true, Coq_true, Coq_true,
-           Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-           (Coq_false, Coq_false, Coq_true, Coq_false, Coq_true, Coq_true,
-           Coq_true, Coq_false)),
-           EmptyString)))))))))))))))))))))))))))))))))))))))))))))))))))))))))
-         (fun ind ->
-         ret (Obj.magic coq_Monad_optErr) (Coq_cons ((Srvalue (Etempvar
-           (add s_extra ind))), Coq_nil)))
-     | Coq_false ->
-       Error (String ((Ascii (Coq_true, Coq_false, Coq_false, Coq_false,
-         Coq_false, Coq_false, Coq_true, Coq_false)), (String ((Ascii
-         (Coq_false, Coq_false, Coq_true, Coq_false, Coq_true, Coq_true,
-         Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
-         Coq_true, Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)),
-         (String ((Ascii (Coq_true, Coq_false, Coq_true, Coq_false,
-         Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-         (Coq_true, Coq_false, Coq_true, Coq_true, Coq_false, Coq_true,
-         Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
-         Coq_false, Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)),
-         (String ((Ascii (Coq_false, Coq_false, Coq_true, Coq_false,
-         Coq_true, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-         (Coq_false, Coq_false, Coq_false, Coq_false, Coq_false, Coq_true,
-         Coq_false, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
-         Coq_true, Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)),
-         (String ((Ascii (Coq_true, Coq_true, Coq_true, Coq_true, Coq_false,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
-         Coq_false, Coq_false, Coq_false, Coq_false, Coq_true, Coq_false,
-         Coq_false)), (String ((Ascii (Coq_true, Coq_true, Coq_false,
-         Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)), (String
-         ((Ascii (Coq_true, Coq_true, Coq_true, Coq_true, Coq_false,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
-         Coq_false, Coq_true, Coq_true, Coq_false, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_false, Coq_false, Coq_false,
-         Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)), (String
-         ((Ascii (Coq_true, Coq_false, Coq_false, Coq_true, Coq_false,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
-         Coq_false, Coq_true, Coq_true, Coq_false, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_true, Coq_false, Coq_true,
-         Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)), (String
-         ((Ascii (Coq_false, Coq_false, Coq_false, Coq_false, Coq_false,
-         Coq_true, Coq_false, Coq_false)), (String ((Ascii (Coq_true,
-         Coq_false, Coq_false, Coq_false, Coq_false, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_false, Coq_true, Coq_true,
-         Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)), (String
-         ((Ascii (Coq_false, Coq_false, Coq_false, Coq_false, Coq_false,
-         Coq_true, Coq_false, Coq_false)), (String ((Ascii (Coq_false,
-         Coq_true, Coq_false, Coq_false, Coq_true, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_true, Coq_false, Coq_true,
-         Coq_true, Coq_false, Coq_true, Coq_false, Coq_false)), (String
-         ((Ascii (Coq_false, Coq_true, Coq_true, Coq_false, Coq_true,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
-         Coq_false, Coq_false, Coq_false, Coq_false, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_false, Coq_false, Coq_true,
-         Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)), (String
-         ((Ascii (Coq_true, Coq_false, Coq_true, Coq_false, Coq_true,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
-         Coq_false, Coq_true, Coq_false, Coq_false, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_false, Coq_false, Coq_false,
-         Coq_false, Coq_false, Coq_true, Coq_false, Coq_false)), (String
-         ((Ascii (Coq_true, Coq_false, Coq_false, Coq_false, Coq_false,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
-         Coq_true, Coq_false, Coq_false, Coq_true, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_false, Coq_false, Coq_false,
-         Coq_false, Coq_false, Coq_true, Coq_false, Coq_false)), (String
-         ((Ascii (Coq_false, Coq_false, Coq_true, Coq_true, Coq_false,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
-         Coq_false, Coq_true, Coq_true, Coq_false, Coq_true, Coq_false,
-         Coq_false)), (String ((Ascii (Coq_false, Coq_true, Coq_true,
-         Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)), (String
-         ((Ascii (Coq_true, Coq_false, Coq_false, Coq_false, Coq_false,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
-         Coq_false, Coq_true, Coq_true, Coq_false, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_true, Coq_false, Coq_true,
-         Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)), (String
-         ((Ascii (Coq_true, Coq_false, Coq_true, Coq_false, Coq_false,
-         Coq_true, Coq_true, Coq_false)),
-         EmptyString)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
-  | Language.Ederef (e0, _) ->
-    (match rvalue with
-     | Coq_true ->
-       bind (Obj.magic coq_Monad_optErr)
-         (stacked_expr temps e0 s_extra Coq_false) (fun e' ->
-         ret (Obj.magic coq_Monad_optErr)
-           (app e' (Coq_cons ((Srvalue Ederef), Coq_nil))))
-     | Coq_false ->
-       Error (String ((Ascii (Coq_true, Coq_false, Coq_false, Coq_false,
-         Coq_false, Coq_false, Coq_true, Coq_false)), (String ((Ascii
-         (Coq_false, Coq_false, Coq_true, Coq_false, Coq_true, Coq_true,
-         Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
-         Coq_true, Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)),
-         (String ((Ascii (Coq_true, Coq_false, Coq_true, Coq_false,
-         Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-         (Coq_true, Coq_false, Coq_true, Coq_true, Coq_false, Coq_true,
-         Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
-         Coq_false, Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)),
-         (String ((Ascii (Coq_false, Coq_false, Coq_true, Coq_false,
-         Coq_true, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-         (Coq_false, Coq_false, Coq_false, Coq_false, Coq_false, Coq_true,
-         Coq_false, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
-         Coq_true, Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)),
-         (String ((Ascii (Coq_true, Coq_true, Coq_true, Coq_true, Coq_false,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
-         Coq_false, Coq_false, Coq_false, Coq_false, Coq_true, Coq_false,
-         Coq_false)), (String ((Ascii (Coq_true, Coq_true, Coq_false,
-         Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)), (String
-         ((Ascii (Coq_true, Coq_true, Coq_true, Coq_true, Coq_false,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
-         Coq_false, Coq_true, Coq_true, Coq_false, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_false, Coq_false, Coq_false,
-         Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)), (String
-         ((Ascii (Coq_true, Coq_false, Coq_false, Coq_true, Coq_false,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
-         Coq_false, Coq_true, Coq_true, Coq_false, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_true, Coq_false, Coq_true,
-         Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)), (String
-         ((Ascii (Coq_false, Coq_false, Coq_false, Coq_false, Coq_false,
-         Coq_true, Coq_false, Coq_false)), (String ((Ascii (Coq_true,
-         Coq_false, Coq_false, Coq_false, Coq_false, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_false, Coq_true, Coq_true,
-         Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)), (String
-         ((Ascii (Coq_false, Coq_false, Coq_false, Coq_false, Coq_false,
-         Coq_true, Coq_false, Coq_false)), (String ((Ascii (Coq_false,
-         Coq_true, Coq_false, Coq_false, Coq_true, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_true, Coq_false, Coq_true,
-         Coq_true, Coq_false, Coq_true, Coq_false, Coq_false)), (String
-         ((Ascii (Coq_false, Coq_true, Coq_true, Coq_false, Coq_true,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
-         Coq_false, Coq_false, Coq_false, Coq_false, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_false, Coq_false, Coq_true,
-         Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)), (String
-         ((Ascii (Coq_true, Coq_false, Coq_true, Coq_false, Coq_true,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
-         Coq_false, Coq_true, Coq_false, Coq_false, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_false, Coq_false, Coq_false,
-         Coq_false, Coq_false, Coq_true, Coq_false, Coq_false)), (String
-         ((Ascii (Coq_true, Coq_false, Coq_false, Coq_false, Coq_false,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
-         Coq_true, Coq_false, Coq_false, Coq_true, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_false, Coq_false, Coq_false,
-         Coq_false, Coq_false, Coq_true, Coq_false, Coq_false)), (String
-         ((Ascii (Coq_false, Coq_false, Coq_true, Coq_true, Coq_false,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
-         Coq_false, Coq_true, Coq_true, Coq_false, Coq_true, Coq_false,
-         Coq_false)), (String ((Ascii (Coq_false, Coq_true, Coq_true,
-         Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)), (String
-         ((Ascii (Coq_true, Coq_false, Coq_false, Coq_false, Coq_false,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
-         Coq_false, Coq_true, Coq_true, Coq_false, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_true, Coq_false, Coq_true,
-         Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)), (String
-         ((Ascii (Coq_true, Coq_false, Coq_true, Coq_false, Coq_false,
-         Coq_true, Coq_true, Coq_false)),
-         EmptyString)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
-  | Language.Eunop (o, e0, _) ->
-    (match rvalue with
-     | Coq_true ->
-       bind (Obj.magic coq_Monad_optErr)
-         (stacked_expr temps e0 s_extra Coq_true) (fun e' ->
-         ret (Obj.magic coq_Monad_optErr)
-           (app e' (Coq_cons ((Srvalue (Eunop o)), Coq_nil))))
-     | Coq_false ->
-       Error (String ((Ascii (Coq_true, Coq_false, Coq_false, Coq_false,
-         Coq_false, Coq_false, Coq_true, Coq_false)), (String ((Ascii
-         (Coq_false, Coq_false, Coq_true, Coq_false, Coq_true, Coq_true,
-         Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
-         Coq_true, Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)),
-         (String ((Ascii (Coq_true, Coq_false, Coq_true, Coq_false,
-         Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-         (Coq_true, Coq_false, Coq_true, Coq_true, Coq_false, Coq_true,
-         Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
-         Coq_false, Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)),
-         (String ((Ascii (Coq_false, Coq_false, Coq_true, Coq_false,
-         Coq_true, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-         (Coq_false, Coq_false, Coq_false, Coq_false, Coq_false, Coq_true,
-         Coq_false, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
-         Coq_true, Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)),
-         (String ((Ascii (Coq_true, Coq_true, Coq_true, Coq_true, Coq_false,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
-         Coq_false, Coq_false, Coq_false, Coq_false, Coq_true, Coq_false,
-         Coq_false)), (String ((Ascii (Coq_true, Coq_true, Coq_false,
-         Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)), (String
-         ((Ascii (Coq_true, Coq_true, Coq_true, Coq_true, Coq_false,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
-         Coq_false, Coq_true, Coq_true, Coq_false, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_false, Coq_false, Coq_false,
-         Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)), (String
-         ((Ascii (Coq_true, Coq_false, Coq_false, Coq_true, Coq_false,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
-         Coq_false, Coq_true, Coq_true, Coq_false, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_true, Coq_false, Coq_true,
-         Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)), (String
-         ((Ascii (Coq_false, Coq_false, Coq_false, Coq_false, Coq_false,
-         Coq_true, Coq_false, Coq_false)), (String ((Ascii (Coq_true,
-         Coq_false, Coq_false, Coq_false, Coq_false, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_false, Coq_true, Coq_true,
-         Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)), (String
-         ((Ascii (Coq_false, Coq_false, Coq_false, Coq_false, Coq_false,
-         Coq_true, Coq_false, Coq_false)), (String ((Ascii (Coq_false,
-         Coq_true, Coq_false, Coq_false, Coq_true, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_true, Coq_false, Coq_true,
-         Coq_true, Coq_false, Coq_true, Coq_false, Coq_false)), (String
-         ((Ascii (Coq_false, Coq_true, Coq_true, Coq_false, Coq_true,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
-         Coq_false, Coq_false, Coq_false, Coq_false, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_false, Coq_false, Coq_true,
-         Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)), (String
-         ((Ascii (Coq_true, Coq_false, Coq_true, Coq_false, Coq_true,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
-         Coq_false, Coq_true, Coq_false, Coq_false, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_false, Coq_false, Coq_false,
-         Coq_false, Coq_false, Coq_true, Coq_false, Coq_false)), (String
-         ((Ascii (Coq_true, Coq_false, Coq_false, Coq_false, Coq_false,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
-         Coq_true, Coq_false, Coq_false, Coq_true, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_false, Coq_false, Coq_false,
-         Coq_false, Coq_false, Coq_true, Coq_false, Coq_false)), (String
-         ((Ascii (Coq_false, Coq_false, Coq_true, Coq_true, Coq_false,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
-         Coq_false, Coq_true, Coq_true, Coq_false, Coq_true, Coq_false,
-         Coq_false)), (String ((Ascii (Coq_false, Coq_true, Coq_true,
-         Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)), (String
-         ((Ascii (Coq_true, Coq_false, Coq_false, Coq_false, Coq_false,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
-         Coq_false, Coq_true, Coq_true, Coq_false, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_true, Coq_false, Coq_true,
-         Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)), (String
-         ((Ascii (Coq_true, Coq_false, Coq_true, Coq_false, Coq_false,
-         Coq_true, Coq_true, Coq_false)),
-         EmptyString)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
-  | Language.Ebinop (o, e1, e2, _) ->
-    bind (Obj.magic coq_Monad_optErr)
-      (stacked_expr temps e1 (S s_extra) rvalue) (fun e1' ->
-      bind (Obj.magic coq_Monad_optErr)
-        (stacked_expr temps e2 s_extra Coq_true) (fun e2' ->
-        ret (Obj.magic coq_Monad_optErr)
-          (app e2'
-            (app e1' (Coq_cons
-              ((match rvalue with
-                | Coq_true -> Srvalue (Ebinop (o, Coq_false))
-                | Coq_false -> Slvalue (Ebinop (o, Coq_false))), Coq_nil))))))
-  | Language.Ecall0 (b, _) ->
-    (match rvalue with
-     | Coq_true ->
-       ret (Obj.magic coq_Monad_optErr) (Coq_cons ((Srvalue (Ecall0 b)),
-         Coq_nil))
-     | Coq_false ->
-       Error (String ((Ascii (Coq_true, Coq_false, Coq_false, Coq_false,
-         Coq_false, Coq_false, Coq_true, Coq_false)), (String ((Ascii
-         (Coq_false, Coq_false, Coq_true, Coq_false, Coq_true, Coq_true,
-         Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
-         Coq_true, Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)),
-         (String ((Ascii (Coq_true, Coq_false, Coq_true, Coq_false,
-         Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-         (Coq_true, Coq_false, Coq_true, Coq_true, Coq_false, Coq_true,
-         Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
-         Coq_false, Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)),
-         (String ((Ascii (Coq_false, Coq_false, Coq_true, Coq_false,
-         Coq_true, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-         (Coq_false, Coq_false, Coq_false, Coq_false, Coq_false, Coq_true,
-         Coq_false, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
-         Coq_true, Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)),
-         (String ((Ascii (Coq_true, Coq_true, Coq_true, Coq_true, Coq_false,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
-         Coq_false, Coq_false, Coq_false, Coq_false, Coq_true, Coq_false,
-         Coq_false)), (String ((Ascii (Coq_true, Coq_true, Coq_false,
-         Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)), (String
-         ((Ascii (Coq_true, Coq_true, Coq_true, Coq_true, Coq_false,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
-         Coq_false, Coq_true, Coq_true, Coq_false, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_false, Coq_false, Coq_false,
-         Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)), (String
-         ((Ascii (Coq_true, Coq_false, Coq_false, Coq_true, Coq_false,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
-         Coq_false, Coq_true, Coq_true, Coq_false, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_true, Coq_false, Coq_true,
-         Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)), (String
-         ((Ascii (Coq_false, Coq_false, Coq_false, Coq_false, Coq_false,
-         Coq_true, Coq_false, Coq_false)), (String ((Ascii (Coq_true,
-         Coq_false, Coq_false, Coq_false, Coq_false, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_false, Coq_true, Coq_true,
-         Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)), (String
-         ((Ascii (Coq_false, Coq_false, Coq_false, Coq_false, Coq_false,
-         Coq_true, Coq_false, Coq_false)), (String ((Ascii (Coq_false,
-         Coq_true, Coq_false, Coq_false, Coq_true, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_true, Coq_false, Coq_true,
-         Coq_true, Coq_false, Coq_true, Coq_false, Coq_false)), (String
-         ((Ascii (Coq_false, Coq_true, Coq_true, Coq_false, Coq_true,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
-         Coq_false, Coq_false, Coq_false, Coq_false, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_false, Coq_false, Coq_true,
-         Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)), (String
-         ((Ascii (Coq_true, Coq_false, Coq_true, Coq_false, Coq_true,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
-         Coq_false, Coq_true, Coq_false, Coq_false, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_false, Coq_false, Coq_false,
-         Coq_false, Coq_false, Coq_true, Coq_false, Coq_false)), (String
-         ((Ascii (Coq_true, Coq_false, Coq_false, Coq_false, Coq_false,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
-         Coq_true, Coq_false, Coq_false, Coq_true, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_false, Coq_false, Coq_false,
-         Coq_false, Coq_false, Coq_true, Coq_false, Coq_false)), (String
-         ((Ascii (Coq_false, Coq_false, Coq_true, Coq_true, Coq_false,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
-         Coq_false, Coq_true, Coq_true, Coq_false, Coq_true, Coq_false,
-         Coq_false)), (String ((Ascii (Coq_false, Coq_true, Coq_true,
-         Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)), (String
-         ((Ascii (Coq_true, Coq_false, Coq_false, Coq_false, Coq_false,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
-         Coq_false, Coq_true, Coq_true, Coq_false, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_true, Coq_false, Coq_true,
-         Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)), (String
-         ((Ascii (Coq_true, Coq_false, Coq_true, Coq_false, Coq_false,
-         Coq_true, Coq_true, Coq_false)),
-         EmptyString)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
-  | Language.Ecall1 (b, e0, _) ->
-    (match rvalue with
-     | Coq_true ->
-       bind (Obj.magic coq_Monad_optErr)
-         (stacked_expr temps e0 s_extra Coq_true) (fun e' ->
-         ret (Obj.magic coq_Monad_optErr)
-           (app e' (Coq_cons ((Srvalue (Ecall1 b)), Coq_nil))))
-     | Coq_false ->
-       Error (String ((Ascii (Coq_true, Coq_false, Coq_false, Coq_false,
-         Coq_false, Coq_false, Coq_true, Coq_false)), (String ((Ascii
-         (Coq_false, Coq_false, Coq_true, Coq_false, Coq_true, Coq_true,
-         Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
-         Coq_true, Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)),
-         (String ((Ascii (Coq_true, Coq_false, Coq_true, Coq_false,
-         Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-         (Coq_true, Coq_false, Coq_true, Coq_true, Coq_false, Coq_true,
-         Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
-         Coq_false, Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)),
-         (String ((Ascii (Coq_false, Coq_false, Coq_true, Coq_false,
-         Coq_true, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-         (Coq_false, Coq_false, Coq_false, Coq_false, Coq_false, Coq_true,
-         Coq_false, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
-         Coq_true, Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)),
-         (String ((Ascii (Coq_true, Coq_true, Coq_true, Coq_true, Coq_false,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
-         Coq_false, Coq_false, Coq_false, Coq_false, Coq_true, Coq_false,
-         Coq_false)), (String ((Ascii (Coq_true, Coq_true, Coq_false,
-         Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)), (String
-         ((Ascii (Coq_true, Coq_true, Coq_true, Coq_true, Coq_false,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
-         Coq_false, Coq_true, Coq_true, Coq_false, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_false, Coq_false, Coq_false,
-         Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)), (String
-         ((Ascii (Coq_true, Coq_false, Coq_false, Coq_true, Coq_false,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
-         Coq_false, Coq_true, Coq_true, Coq_false, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_true, Coq_false, Coq_true,
-         Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)), (String
-         ((Ascii (Coq_false, Coq_false, Coq_false, Coq_false, Coq_false,
-         Coq_true, Coq_false, Coq_false)), (String ((Ascii (Coq_true,
-         Coq_false, Coq_false, Coq_false, Coq_false, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_false, Coq_true, Coq_true,
-         Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)), (String
-         ((Ascii (Coq_false, Coq_false, Coq_false, Coq_false, Coq_false,
-         Coq_true, Coq_false, Coq_false)), (String ((Ascii (Coq_false,
-         Coq_true, Coq_false, Coq_false, Coq_true, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_true, Coq_false, Coq_true,
-         Coq_true, Coq_false, Coq_true, Coq_false, Coq_false)), (String
-         ((Ascii (Coq_false, Coq_true, Coq_true, Coq_false, Coq_true,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
-         Coq_false, Coq_false, Coq_false, Coq_false, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_false, Coq_false, Coq_true,
-         Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)), (String
-         ((Ascii (Coq_true, Coq_false, Coq_true, Coq_false, Coq_true,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
-         Coq_false, Coq_true, Coq_false, Coq_false, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_false, Coq_false, Coq_false,
-         Coq_false, Coq_false, Coq_true, Coq_false, Coq_false)), (String
-         ((Ascii (Coq_true, Coq_false, Coq_false, Coq_false, Coq_false,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
-         Coq_true, Coq_false, Coq_false, Coq_true, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_false, Coq_false, Coq_false,
-         Coq_false, Coq_false, Coq_true, Coq_false, Coq_false)), (String
-         ((Ascii (Coq_false, Coq_false, Coq_true, Coq_true, Coq_false,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
-         Coq_false, Coq_true, Coq_true, Coq_false, Coq_true, Coq_false,
-         Coq_false)), (String ((Ascii (Coq_false, Coq_true, Coq_true,
-         Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)), (String
-         ((Ascii (Coq_true, Coq_false, Coq_false, Coq_false, Coq_false,
-         Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
-         Coq_false, Coq_true, Coq_true, Coq_false, Coq_true, Coq_true,
-         Coq_false)), (String ((Ascii (Coq_true, Coq_false, Coq_true,
-         Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)), (String
-         ((Ascii (Coq_true, Coq_false, Coq_true, Coq_false, Coq_false,
-         Coq_true, Coq_true, Coq_false)),
-         EmptyString)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
-  | _ ->
-    Error (String ((Ascii (Coq_true, Coq_false, Coq_true, Coq_false,
-      Coq_false, Coq_false, Coq_true, Coq_false)), (String ((Ascii
-      (Coq_false, Coq_true, Coq_true, Coq_false, Coq_false, Coq_true,
-      Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_false, Coq_false,
-      Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-      (Coq_true, Coq_false, Coq_true, Coq_false, Coq_false, Coq_true,
-      Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false, Coq_true,
-      Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-      (Coq_false, Coq_false, Coq_true, Coq_false, Coq_false, Coq_true,
-      Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
-      Coq_false, Coq_false, Coq_false, Coq_true, Coq_false, Coq_false)),
-      (String ((Ascii (Coq_true, Coq_false, Coq_false, Coq_true, Coq_false,
-      Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_true,
-      Coq_true, Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)), (String
-      ((Ascii (Coq_false, Coq_false, Coq_false, Coq_false, Coq_false,
-      Coq_true, Coq_false, Coq_false)), (String ((Ascii (Coq_true, Coq_true,
-      Coq_false, Coq_false, Coq_true, Coq_false, Coq_true, Coq_false)),
-      (String ((Ascii (Coq_false, Coq_false, Coq_true, Coq_false, Coq_true,
-      Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_false,
-      Coq_false, Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)),
-      (String ((Ascii (Coq_true, Coq_true, Coq_false, Coq_false, Coq_false,
-      Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_true,
-      Coq_false, Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)),
-      (String ((Ascii (Coq_true, Coq_false, Coq_true, Coq_false, Coq_false,
-      Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
-      Coq_true, Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)),
-      (String ((Ascii (Coq_true, Coq_true, Coq_true, Coq_true, Coq_false,
-      Coq_true, Coq_false, Coq_false)), (String ((Ascii (Coq_true, Coq_true,
-      Coq_true, Coq_false, Coq_false, Coq_false, Coq_true, Coq_false)),
-      (String ((Ascii (Coq_true, Coq_false, Coq_true, Coq_false, Coq_false,
-      Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_true,
-      Coq_true, Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)), (String
-      ((Ascii (Coq_false, Coq_true, Coq_true, Coq_true, Coq_false, Coq_true,
-      Coq_false, Coq_false)), (String ((Ascii (Coq_false, Coq_true, Coq_true,
-      Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)),
-      EmptyString))))))))))))))))))))))))))))))))))))))))))))))
-
-(** val stacked_exprs :
-    nat PTree.t -> Language.expr list -> nat -> statement list optErr **)
-
-let rec stacked_exprs temps es s_extra =
-  match es with
-  | Coq_nil -> ret (Obj.magic coq_Monad_optErr) Coq_nil
-  | Coq_cons (e, rest) ->
-    bind (Obj.magic coq_Monad_optErr)
-      (stacked_expr temps e (add (length rest) s_extra) Coq_true) (fun e' ->
-      bind (Obj.magic coq_Monad_optErr) (stacked_exprs temps rest s_extra)
-        (fun rest' -> ret (Obj.magic coq_Monad_optErr) (app rest' e')))
-
-(** val stacked_optexpr :
-    nat PTree.t -> Language.expr option -> statement list optErr **)
-
-let stacked_optexpr temps = function
-| Some e -> stacked_expr temps e O Coq_true
-| None -> ret (Obj.magic coq_Monad_optErr) (Coq_cons (Spushvoid, Coq_nil))
-
-(** val ident_indices :
-    nat PTree.t -> ident list -> nat -> nat list optErr **)
-
-let rec ident_indices temps a offset =
-  match a with
-  | Coq_nil -> ret (Obj.magic coq_Monad_optErr) Coq_nil
-  | Coq_cons (i, rest) ->
-    bind (Obj.magic coq_Monad_optErr)
-      (fromOption (PTree.get i (Obj.magic temps)) (String ((Ascii (Coq_true,
-        Coq_true, Coq_false, Coq_false, Coq_false, Coq_true, Coq_true,
-        Coq_false)), (String ((Ascii (Coq_true, Coq_true, Coq_true, Coq_true,
-        Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-        (Coq_true, Coq_false, Coq_true, Coq_false, Coq_true, Coq_true,
-        Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
-        Coq_true, Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)),
-        (String ((Ascii (Coq_false, Coq_false, Coq_true, Coq_false,
-        Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-        (Coq_false, Coq_false, Coq_false, Coq_false, Coq_false, Coq_true,
-        Coq_false, Coq_false)), (String ((Ascii (Coq_false, Coq_true,
-        Coq_true, Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)),
-        (String ((Ascii (Coq_true, Coq_true, Coq_true, Coq_true, Coq_false,
-        Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
-        Coq_false, Coq_true, Coq_false, Coq_true, Coq_true, Coq_true,
-        Coq_false)), (String ((Ascii (Coq_false, Coq_false, Coq_false,
-        Coq_false, Coq_false, Coq_true, Coq_false, Coq_false)), (String
-        ((Ascii (Coq_false, Coq_true, Coq_true, Coq_false, Coq_false,
-        Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
-        Coq_false, Coq_false, Coq_true, Coq_false, Coq_true, Coq_true,
-        Coq_false)), (String ((Ascii (Coq_false, Coq_true, Coq_true,
-        Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-        (Coq_false, Coq_false, Coq_true, Coq_false, Coq_false, Coq_true,
-        Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
-        Coq_false, Coq_false, Coq_false, Coq_true, Coq_false, Coq_false)),
-        (String ((Ascii (Coq_true, Coq_false, Coq_false, Coq_true, Coq_false,
-        Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
-        Coq_false, Coq_true, Coq_false, Coq_false, Coq_true, Coq_true,
-        Coq_false)), (String ((Ascii (Coq_true, Coq_false, Coq_true,
-        Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)), (String
-        ((Ascii (Coq_false, Coq_true, Coq_true, Coq_true, Coq_false,
-        Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
-        Coq_false, Coq_true, Coq_false, Coq_true, Coq_true, Coq_true,
-        Coq_false)), (String ((Ascii (Coq_true, Coq_false, Coq_false,
-        Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-        (Coq_false, Coq_true, Coq_true, Coq_false, Coq_false, Coq_true,
-        Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_false,
-        Coq_false, Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)),
-        (String ((Ascii (Coq_true, Coq_false, Coq_true, Coq_false, Coq_false,
-        Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
-        Coq_true, Coq_false, Coq_false, Coq_true, Coq_true, Coq_true,
-        Coq_false)),
-        EmptyString)))))))))))))))))))))))))))))))))))))))))))))))))))
-      (fun t0 ->
-      bind (Obj.magic coq_Monad_optErr) (ident_indices temps rest offset)
-        (fun resti ->
-        ret (Obj.magic coq_Monad_optErr) (Coq_cons
-          ((add (add t0 offset) (length rest)), resti))))
-
-(** val set_indices : nat list -> statement list **)
-
-let set_indices inds =
-  map (fun x -> Sset x) inds
-
-(** val optident : nat PTree.t -> ident option -> statement optErr **)
-
-let optident temps = function
-| Some b ->
-  bind (Obj.magic coq_Monad_optErr)
-    (fromOption (PTree.get b (Obj.magic temps)) (String ((Ascii (Coq_true,
-      Coq_true, Coq_false, Coq_false, Coq_false, Coq_true, Coq_true,
-      Coq_false)), (String ((Ascii (Coq_true, Coq_true, Coq_true, Coq_true,
-      Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
-      Coq_false, Coq_true, Coq_false, Coq_true, Coq_true, Coq_true,
-      Coq_false)), (String ((Ascii (Coq_false, Coq_false, Coq_true, Coq_true,
-      Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
-      Coq_false, Coq_true, Coq_false, Coq_false, Coq_true, Coq_true,
-      Coq_false)), (String ((Ascii (Coq_false, Coq_false, Coq_false,
-      Coq_false, Coq_false, Coq_true, Coq_false, Coq_false)), (String ((Ascii
-      (Coq_false, Coq_true, Coq_true, Coq_true, Coq_false, Coq_true,
-      Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_true, Coq_true,
-      Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-      (Coq_false, Coq_false, Coq_true, Coq_false, Coq_true, Coq_true,
-      Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
-      Coq_false, Coq_false, Coq_false, Coq_true, Coq_false, Coq_false)),
-      (String ((Ascii (Coq_false, Coq_true, Coq_true, Coq_false, Coq_false,
-      Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_false,
-      Coq_false, Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)),
-      (String ((Ascii (Coq_false, Coq_true, Coq_true, Coq_true, Coq_false,
-      Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
-      Coq_true, Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)),
-      (String ((Ascii (Coq_false, Coq_false, Coq_false, Coq_false, Coq_false,
-      Coq_true, Coq_false, Coq_false)), (String ((Ascii (Coq_true, Coq_false,
-      Coq_false, Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)),
-      (String ((Ascii (Coq_false, Coq_false, Coq_true, Coq_false, Coq_false,
-      Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_false,
-      Coq_true, Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)),
-      (String ((Ascii (Coq_false, Coq_true, Coq_true, Coq_true, Coq_false,
-      Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
-      Coq_true, Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)), (String
-      ((Ascii (Coq_true, Coq_false, Coq_false, Coq_true, Coq_false, Coq_true,
-      Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_true, Coq_true,
-      Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-      (Coq_true, Coq_false, Coq_false, Coq_true, Coq_false, Coq_true,
-      Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_false, Coq_true,
-      Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-      (Coq_false, Coq_true, Coq_false, Coq_false, Coq_true, Coq_true,
-      Coq_true, Coq_false)),
-      EmptyString)))))))))))))))))))))))))))))))))))))))))))))))))))
-    (fun t0 -> ret (Obj.magic coq_Monad_optErr) (Sset t0))
-| None -> ret (Obj.magic coq_Monad_optErr) Spop
-
-(** val return_type : Language2.coq_function -> coq_type **)
-
-let return_type =
-  Language2.fn_return
-
-(** val toreturn : Language2.coq_function -> bool option -> ret_type **)
-
-let toreturn f = function
-| Some b ->
-  (match b with
-   | Coq_true ->
-     (match return_type f with
-      | Tvoid -> Tvoid_method
-      | Tarray (_, _) -> Terror
-      | Tstruct (_, _) -> Terror
-      | _ -> Tsome_method)
-   | Coq_false ->
-     (match return_type f with
-      | Tvoid -> Tvoid_fun
-      | Tarray (_, _) -> Terror
-      | Tstruct (_, _) -> Terror
-      | _ -> Tsome_fun))
-| None ->
-  (match return_type f with
-   | Tvoid -> Tvoid_constructor
-   | Tarray (_, _) -> Terror
-   | Tstruct (_, _) -> Terror
-   | _ -> Tsome_constructor)
-
-(** val zero_stm : statement **)
-
-let zero_stm =
-  Srvalue (Econst_int256 Int256.zero)
-
-(** val xzero_stms : nat -> statement list **)
-
-let rec xzero_stms = function
-| O -> Coq_nil
-| S n -> app (xzero_stms n) (Coq_cons (zero_stm, Coq_nil))
-
-(** val zero_stms : nat -> statement list **)
-
-let zero_stms c = match c with
-| O -> Coq_cons (Sskip, Coq_nil)
-| S _ -> xzero_stms c
-
-(** val z_stm : coq_Z -> statement **)
-
-let z_stm z =
-  Srvalue (Econst_int256 (Int256.repr z))
-
-(** val stacked_code :
-    nat PTree.t -> Language2.coq_function -> Language2.code -> code optErr **)
-
-let rec stacked_code temps f = function
-| Coq_nil -> ret (Obj.magic coq_Monad_optErr) Coq_nil
+let rec nodes_in_code = function
+| Coq_nil -> Coq_nil
 | Coq_cons (s, rest) ->
-  bind (Obj.magic coq_Monad_optErr) (stacked_code temps f rest) (fun trest ->
-    match s with
-    | Language2.Sassign (lv, rv) ->
+  let more_nodes = nodes_in_code rest in
+  (match s with
+   | Slabel lbl -> Coq_cons (lbl, more_nodes)
+   | _ -> more_nodes)
+
+(** val allocate_labels : fd_label -> code -> label_map -> label_map **)
+
+let allocate_labels fn c base =
+  let nodes = nodes_in_code c in
+  xallocate_labels (map (elt_key fn) nodes)
+    (xallocate_labels (map (call_elt_key fn) nodes) base)
+
+(** val allocate_labels_fundef :
+    fd_label -> coq_function -> label_map -> label_map **)
+
+let allocate_labels_fundef fn_l f base =
+  allocate_label (key (Coq_inl fn_l)) (allocate_labels fn_l f.fn_code base)
+
+(** val xallocate_labels_fun :
+    (label, coq_function) prod list -> label_map -> label_map **)
+
+let rec xallocate_labels_fun elts base =
+  match elts with
+  | Coq_nil -> base
+  | Coq_cons (p, rest) ->
+    let Coq_pair (fn, fd) = p in
+    let rest_allocated = xallocate_labels_fun rest base in
+    allocate_labels_fundef (Lfun fn) fd rest_allocated
+
+(** val allocate_labels_fun :
+    coq_function PTree.t -> label_map -> label_map **)
+
+let allocate_labels_fun defs base =
+  xallocate_labels_fun (PTree.elements defs) base
+
+(** val allocate_labels_methods :
+    Int.int list -> coq_function option IntMap.t -> label_map -> label_map **)
+
+let rec allocate_labels_methods sigs defs base =
+  match sigs with
+  | Coq_nil -> base
+  | Coq_cons (sig0, rest) ->
+    let rest_allocated = allocate_labels_methods rest defs base in
+    (match IntMap.get sig0 defs with
+     | Some fd ->
+       allocate_label (key (Coq_inl (Lmultiplexer sig0)))
+         (allocate_labels_fundef (Lmethod sig0) fd rest_allocated)
+     | None -> rest_allocated)
+
+(** val allocate_labels_constructor :
+    coq_function option -> label_map -> label_map **)
+
+let allocate_labels_constructor optc base =
+  match optc with
+  | Some fd -> allocate_labels_fundef Lconstructor fd base
+  | None -> base
+
+(** val allocate_labels_ge : genv -> label_map **)
+
+let allocate_labels_ge ge =
+  let sigs = ge.Genv.genv_methods in
+  let fundefs = ge.Genv.genv_fundefs in
+  let methoddefs = ge.Genv.genv_methoddefs in
+  let constructor = ge.Genv.genv_constructor in
+  allocate_label (key (Coq_inl Lbody))
+    (allocate_labels_constructor constructor
+      (allocate_labels_methods sigs methoddefs
+        (allocate_labels_fun fundefs empty_label_map)))
+
+(** val clabeled_stm :
+    fd_label -> label_map -> statement -> statement optErr **)
+
+let clabeled_stm fn lm s = match s with
+| Scall (rv, dst, args, retlbl) ->
+  bind (Obj.magic coq_Monad_optErr)
+    (Obj.magic label_key lm (Coq_inl (Lfun dst))) (fun dst' ->
+    bind (Obj.magic coq_Monad_optErr)
+      (Obj.magic label_key lm (call_node_within fn retlbl)) (fun retlbl' ->
+      ret (Obj.magic coq_Monad_optErr) (Scall (rv, dst', args, retlbl'))))
+| Slabel lbl ->
+  bind (Obj.magic coq_Monad_optErr)
+    (Obj.magic label_key lm (node_within fn lbl)) (fun l ->
+    ret (Obj.magic coq_Monad_optErr) (Slabel l))
+| Sjump lbl ->
+  bind (Obj.magic coq_Monad_optErr)
+    (Obj.magic label_key lm (node_within fn lbl)) (fun lbl' ->
+    ret (Obj.magic coq_Monad_optErr) (Sjump lbl'))
+| Sjumpi (e, lbl) ->
+  bind (Obj.magic coq_Monad_optErr)
+    (Obj.magic label_key lm (node_within fn lbl)) (fun lbl' ->
+    ret (Obj.magic coq_Monad_optErr) (Sjumpi (e, lbl')))
+| Stransfer (a, v, fail) ->
+  bind (Obj.magic coq_Monad_optErr)
+    (Obj.magic label_key lm (node_within fn fail)) (fun f ->
+    ret (Obj.magic coq_Monad_optErr) (Stransfer (a, v, f)))
+| Scallmethod (a, r, s0, v, args, fail) ->
+  bind (Obj.magic coq_Monad_optErr)
+    (Obj.magic label_key lm (node_within fn fail)) (fun f ->
+    ret (Obj.magic coq_Monad_optErr) (Scallmethod (a, r, s0, v, args, f)))
+| _ -> ret (Obj.magic coq_Monad_optErr) s
+
+(** val clabeled_code : fd_label -> label_map -> code -> code optErr **)
+
+let clabeled_code fn lm c =
+  map_error (clabeled_stm fn lm) c
+
+(** val fn_is_method : fd_label -> bool **)
+
+let fn_is_method = function
+| Lfun _ -> Coq_false
+| _ -> Coq_true
+
+(** val clabeled_function_body : label -> fd_label -> code -> code **)
+
+let clabeled_function_body l fn c =
+  Coq_cons ((Slabel l), (Coq_cons ((Sfetchargs (fn_is_method fn)), (Coq_cons
+    (Sintro, c)))))
+
+(** val clabeled_function :
+    label_map -> fd_label -> coq_function -> coq_function optErr **)
+
+let clabeled_function lm fn f =
+  bind (Obj.magic coq_Monad_optErr) (Obj.magic clabeled_code fn lm f.fn_code)
+    (fun c ->
+    bind (Obj.magic coq_Monad_optErr) (Obj.magic label_key lm (Coq_inl fn))
+      (fun l ->
+      let body = clabeled_function_body l fn c in
+      ret (Obj.magic coq_Monad_optErr) { fn_return = f.fn_return; fn_params =
+        f.fn_params; fn_temps = f.fn_temps; fn_locals = f.fn_locals;
+        fn_code = body }))
+
+(** val clabeled_fundef :
+    label_map -> fd_label -> coq_function -> coq_function optErr **)
+
+let clabeled_fundef =
+  clabeled_function
+
+(** val clabeled_fundef_f :
+    label_map -> label -> coq_function -> (label, coq_function) prod optErr **)
+
+let clabeled_fundef_f lm name fd =
+  bind (Obj.magic coq_Monad_optErr)
+    (Obj.magic clabeled_fundef lm (Lfun name) fd) (fun f ->
+    bind (Obj.magic coq_Monad_optErr)
+      (Obj.magic label_key lm (Coq_inl (Lfun name))) (fun l ->
+      ret (Obj.magic coq_Monad_optErr) (Coq_pair (l, f))))
+
+(** val clabeled_fundefs :
+    label_map -> coq_function PTree.t -> coq_function PTree.t optErr **)
+
+let clabeled_fundefs lm t0 =
+  transl_tree_keys_move (clabeled_fundef_f lm) t0
+
+(** val xclabeled_methods :
+    label_map -> Int.int list -> coq_function option IntMap.t -> coq_function
+    option IntMap.t optErr **)
+
+let rec xclabeled_methods lm sigs methods =
+  match sigs with
+  | Coq_nil -> ret (Obj.magic coq_Monad_optErr) (IntMap.init None)
+  | Coq_cons (sig0, rest) ->
+    bind (Obj.magic coq_Monad_optErr) (xclabeled_methods lm rest methods)
+      (fun crest ->
       bind (Obj.magic coq_Monad_optErr)
-        (stacked_expr temps lv (S O) Coq_false) (fun lv' ->
-        bind (Obj.magic coq_Monad_optErr) (stacked_expr temps rv O Coq_true)
-          (fun rv' ->
-          ret (Obj.magic coq_Monad_optErr)
-            (app rv' (app lv' (Coq_cons (Sassign, trest))))))
-    | Language2.Sset (i, rv) ->
-      bind (Obj.magic coq_Monad_optErr)
-        (fromOption (PTree.get i (Obj.magic temps)) (String ((Ascii
-          (Coq_true, Coq_true, Coq_false, Coq_false, Coq_false, Coq_true,
-          Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_true,
-          Coq_true, Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)),
-          (String ((Ascii (Coq_true, Coq_false, Coq_true, Coq_false,
-          Coq_true, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-          (Coq_false, Coq_false, Coq_true, Coq_true, Coq_false, Coq_true,
-          Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
-          Coq_true, Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)),
-          (String ((Ascii (Coq_false, Coq_false, Coq_false, Coq_false,
-          Coq_false, Coq_true, Coq_false, Coq_false)), (String ((Ascii
+        (fromOption (IntMap.get sig0 (Obj.magic methods)) (String ((Ascii
+          (Coq_true, Coq_true, Coq_false, Coq_false, Coq_false, Coq_false,
+          Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_false,
+          Coq_false, Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)),
+          (String ((Ascii (Coq_false, Coq_true, Coq_true, Coq_true,
+          Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
           (Coq_false, Coq_true, Coq_true, Coq_true, Coq_false, Coq_true,
           Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_true,
           Coq_true, Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)),
@@ -928,177 +204,35 @@ let rec stacked_code temps f = function
           Coq_true, Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)),
           (String ((Ascii (Coq_false, Coq_false, Coq_false, Coq_false,
           Coq_false, Coq_true, Coq_false, Coq_false)), (String ((Ascii
-          (Coq_true, Coq_false, Coq_false, Coq_true, Coq_false, Coq_true,
-          Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
-          Coq_true, Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)),
-          (String ((Ascii (Coq_true, Coq_false, Coq_true, Coq_false,
-          Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-          (Coq_false, Coq_true, Coq_true, Coq_true, Coq_false, Coq_true,
-          Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
-          Coq_true, Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)),
-          (String ((Ascii (Coq_true, Coq_false, Coq_false, Coq_true,
-          Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-          (Coq_false, Coq_true, Coq_true, Coq_false, Coq_false, Coq_true,
+          (Coq_true, Coq_false, Coq_true, Coq_true, Coq_false, Coq_true,
           Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_false,
-          Coq_false, Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)),
-          (String ((Ascii (Coq_true, Coq_false, Coq_true, Coq_false,
-          Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-          (Coq_false, Coq_true, Coq_false, Coq_false, Coq_true, Coq_true,
-          Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
-          Coq_false, Coq_false, Coq_false, Coq_true, Coq_false, Coq_false)),
+          Coq_true, Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)),
           (String ((Ascii (Coq_false, Coq_false, Coq_true, Coq_false,
           Coq_true, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-          (Coq_true, Coq_true, Coq_true, Coq_true, Coq_false, Coq_true,
-          Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
-          Coq_false, Coq_false, Coq_false, Coq_true, Coq_false, Coq_false)),
-          (String ((Ascii (Coq_true, Coq_true, Coq_false, Coq_false,
-          Coq_true, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-          (Coq_true, Coq_false, Coq_true, Coq_false, Coq_false, Coq_true,
-          Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
-          Coq_true, Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)),
-          EmptyString)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
-        (fun t0 ->
-        bind (Obj.magic coq_Monad_optErr) (stacked_expr temps rv O Coq_true)
-          (fun rv' ->
-          ret (Obj.magic coq_Monad_optErr)
-            (app rv' (Coq_cons ((Sset t0), trest)))))
-    | Language2.Scall (rv, dest, args, retlbl) ->
-      bind (Obj.magic coq_Monad_optErr) (Obj.magic optident temps rv)
-        (fun t0 ->
-        bind (Obj.magic coq_Monad_optErr) (stacked_exprs temps args (S O))
-          (fun args' ->
-          ret (Obj.magic coq_Monad_optErr)
-            (app (Coq_cons ((Spushlabel (Lreturn retlbl)), args'))
-              (app (Coq_cons ((Spushlabel (Lcall dest)), (Coq_cons (Sjump,
-                (Coq_cons ((Slabel retlbl), Coq_nil)))))) (Coq_cons (t0,
-                trest))))))
-    | Language2.Sreturn rv ->
-      bind (Obj.magic coq_Monad_optErr) (stacked_optexpr temps rv)
-        (fun rv' -> ret (Obj.magic coq_Monad_optErr) (app rv' trest))
-    | Language2.Sdone method0 ->
-      ret (Obj.magic coq_Monad_optErr) (Coq_cons ((Sdone
-        ((length (all_temps ftype (Obj.magic f))), (toreturn f method0))),
-        trest))
-    | Language2.Slabel lbl ->
-      ret (Obj.magic coq_Monad_optErr) (Coq_cons ((Slabel lbl), trest))
-    | Language2.Sjump lbl ->
-      ret (Obj.magic coq_Monad_optErr) (Coq_cons ((Spushlabel (Linternal
-        lbl)), (Coq_cons (Sjump, trest))))
-    | Language2.Sjumpi (cond, lbl) ->
-      bind (Obj.magic coq_Monad_optErr) (stacked_expr temps cond O Coq_true)
-        (fun cond' ->
-        ret (Obj.magic coq_Monad_optErr)
-          (app cond' (Coq_cons ((Spushlabel (Linternal lbl)), (Coq_cons
-            (Sjumpi, trest))))))
-    | Language2.Stransfer (a, v, fail) ->
-      bind (Obj.magic coq_Monad_optErr)
-        (stacked_expr temps a (S (S (S (S (S O))))) Coq_true) (fun a' ->
+          (Coq_false, Coq_false, Coq_false, Coq_true, Coq_false, Coq_true,
+          Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_true,
+          Coq_true, Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)),
+          (String ((Ascii (Coq_false, Coq_false, Coq_true, Coq_false,
+          Coq_false, Coq_true, Coq_true, Coq_false)),
+          EmptyString))))))))))))))))))))))))))))))))))))) (fun meth ->
         bind (Obj.magic coq_Monad_optErr)
-          (stacked_expr temps v (S (S (S (S O)))) Coq_true) (fun v' ->
-          ret (Obj.magic coq_Monad_optErr) (Coq_cons (zero_stm, (Coq_cons
-            (zero_stm, (Coq_cons (zero_stm, (Coq_cons (zero_stm,
-            (app v'
-              (app a' (Coq_cons (zero_stm, (Coq_cons (Stransfer, (Coq_cons
-                ((Srvalue (Eunop Onotbool)), (Coq_cons ((Spushlabel
-                (Linternal fail)), (Coq_cons (Sjumpi, trest))))))))))))))))))))))
-    | Language2.Scallmethod (a, rvs, sg, v, args, fail) ->
-      bind (Obj.magic coq_Monad_optErr)
-        (stacked_expr temps a (S (S (S (S (S O))))) Coq_true) (fun a' ->
-        bind (Obj.magic coq_Monad_optErr)
-          (stacked_expr temps v (S (S (S (S O)))) Coq_true) (fun v' ->
-          bind (Obj.magic coq_Monad_optErr)
-            (stacked_exprs temps args (S (S (S (S (S (S (S O))))))))
-            (fun args' ->
-            bind (Obj.magic coq_Monad_optErr)
-              (Obj.magic ident_indices temps rvs (S O)) (fun rv_inds ->
-              let retcount = length rvs in
-              let argcount = length args in
-              ret (Obj.magic coq_Monad_optErr) (Coq_cons
-                ((z_stm (arglen argcount)), (Coq_cons
-                ((z_stm (argpos retcount)), (Coq_cons
-                ((z_stm (retlen retcount)), (Coq_cons ((z_stm retpos),
-                (app v'
-                  (app a' (Coq_cons (zero_stm,
-                    (app args'
-                      (app (Coq_cons ((Scallmethod (sg, argcount, retcount)),
-                        (set_indices rv_inds)))
-                        (app (Coq_cons ((Srvalue (Eunop Onotbool)), (Coq_cons
-                          ((Spushlabel (Linternal fail)), (Coq_cons (Sjumpi,
-                          Coq_nil)))))) trest)))))))))))))))))))
-    | Language2.Slog (topics, args) ->
-      bind (Obj.magic coq_Monad_optErr) (stacked_exprs temps topics O)
-        (fun topics' ->
-        bind (Obj.magic coq_Monad_optErr)
-          (stacked_exprs temps args (length topics)) (fun args' ->
-          ret (Obj.magic coq_Monad_optErr)
-            (app topics'
-              (app args' (Coq_cons ((Slog ((length topics), (length args))),
-                trest))))))
-    | Language2.Srevert ->
-      ret (Obj.magic coq_Monad_optErr) (Coq_cons (Srevert, trest))
-    | Language2.Sfetchargs fetch ->
-      ret (Obj.magic coq_Monad_optErr) (Coq_cons
-        ((match fetch with
-          | Coq_true -> Sfetchargs (length (some_args ftype (Obj.magic f)))
-          | Coq_false -> Sskip), trest))
-    | Sintro ->
-      let push_temps = zero_stms (length (some_temps ftype (Obj.magic f))) in
-      ret (Obj.magic coq_Monad_optErr) (app push_temps trest))
+          (Obj.magic clabeled_fundef lm (Lmethod sig0) meth) (fun b ->
+          ret (Obj.magic coq_Monad_optErr) (IntMap.set sig0 (Some b) crest))))
 
-(** val allocate_locals :
-    (ident, coq_type) prod list -> nat -> nat PTree.t **)
+(** val clabeled_methods :
+    label_map -> Int.int list -> coq_function option IntMap.t -> coq_function
+    option IntMap.t optErr **)
 
-let rec allocate_locals ids base =
-  match ids with
-  | Coq_nil -> PTree.empty
-  | Coq_cons (p, rest) ->
-    let Coq_pair (id, _) = p in
-    PTree.set id base (allocate_locals rest (S base))
+let clabeled_methods =
+  xclabeled_methods
 
-(** val allocate_all_locals : (ident, coq_type) prod list -> nat PTree.t **)
+(** val clabeled_constructor :
+    label_map -> coq_function option -> coq_function optErr **)
 
-let allocate_all_locals ids =
-  allocate_locals ids O
-
-(** val allocate_fn_locals : Language2.coq_function -> nat PTree.t **)
-
-let allocate_fn_locals f =
-  allocate_all_locals (all_temps ftype (Obj.magic f))
-
-(** val stacked_function :
-    Language2.coq_function -> Language0.coq_function optErr **)
-
-let stacked_function f =
-  bind (Obj.magic coq_Monad_optErr)
-    (Obj.magic stacked_code (allocate_fn_locals f) f f.Language2.fn_code)
-    (fun c -> ret (Obj.magic coq_Monad_optErr) c)
-
-(** val stacked_fundef :
-    Language2.coq_function -> Language0.coq_function optErr **)
-
-let stacked_fundef =
-  stacked_function
-
-(** val stacked_fundefs :
-    Language2.coq_function PTree.t -> Language0.coq_function PTree.t optErr **)
-
-let stacked_fundefs t0 =
-  transl_tree stacked_fundef t0
-
-(** val stacked_methods :
-    Language2.coq_function option IntMap.t -> Language0.coq_function option
-    IntMap.t optErr **)
-
-let stacked_methods methods =
-  transl_map stacked_fundef methods
-
-(** val stacked_constructor :
-    Language2.coq_function option -> Language0.coq_function optErr **)
-
-let stacked_constructor = function
+let clabeled_constructor lm = function
 | Some c ->
-  bind (Obj.magic coq_Monad_optErr) (stacked_fundef c) (fun f ->
-    ret (Obj.magic coq_Monad_optErr) f)
+  bind (Obj.magic coq_Monad_optErr) (clabeled_fundef lm Lconstructor c)
+    (fun f -> ret (Obj.magic coq_Monad_optErr) f)
 | None ->
   Error (String ((Ascii (Coq_true, Coq_true, Coq_false, Coq_false, Coq_false,
     Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_true,
@@ -1133,9 +267,9 @@ let stacked_constructor = function
     Coq_false, Coq_true, Coq_false, Coq_false, Coq_true, Coq_true,
     Coq_false)), EmptyString))))))))))))))))))))))))))))))))))))))))))
 
-(** val stacked_genv : Language2.genv -> genv optErr **)
+(** val clabeled_genv : label_map -> genv -> genv optErr **)
 
-let stacked_genv ge =
+let clabeled_genv lm ge =
   let vars = ge.Genv.genv_vars in
   let funcs = ge.Genv.genv_funcs in
   let methods = ge.Genv.genv_methods in
@@ -1143,146 +277,170 @@ let stacked_genv ge =
   let fundefs = ge.Genv.genv_fundefs in
   let methoddefs = ge.Genv.genv_methoddefs in
   let constructor = ge.Genv.genv_constructor in
-  bind (Obj.magic coq_Monad_optErr) (Obj.magic stacked_fundefs fundefs)
-    (fun fundefs0 ->
-    bind (Obj.magic coq_Monad_optErr) (Obj.magic stacked_methods methoddefs)
-      (fun methoddefs0 ->
-      bind (Obj.magic coq_Monad_optErr)
-        (Obj.magic stacked_constructor constructor) (fun constructor0 ->
-        ret (Obj.magic coq_Monad_optErr) { Genv.genv_vars = vars;
-          Genv.genv_funcs = funcs; Genv.genv_methods = methods;
-          Genv.genv_defs = defs; Genv.genv_fundefs = fundefs0;
-          Genv.genv_methoddefs = methoddefs0; Genv.genv_constructor = (Some
-          constructor0) })))
+  (match label_functions fundefs with
+   | Coq_true ->
+     (match label_methods methoddefs with
+      | Coq_true ->
+        bind (Obj.magic coq_Monad_optErr)
+          (Obj.magic clabeled_fundefs lm fundefs) (fun fundefs0 ->
+          bind (Obj.magic coq_Monad_optErr)
+            (Obj.magic clabeled_methods lm methods methoddefs)
+            (fun methoddefs0 ->
+            bind (Obj.magic coq_Monad_optErr)
+              (Obj.magic clabeled_constructor lm constructor)
+              (fun constructor0 ->
+              ret (Obj.magic coq_Monad_optErr) { Genv.genv_vars = vars;
+                Genv.genv_funcs = funcs; Genv.genv_methods = methods;
+                Genv.genv_defs = defs; Genv.genv_fundefs = fundefs0;
+                Genv.genv_methoddefs = methoddefs0; Genv.genv_constructor =
+                (Some constructor0) })))
+      | Coq_false ->
+        Error (String ((Ascii (Coq_true, Coq_false, Coq_false, Coq_true,
+          Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
+          (Coq_false, Coq_true, Coq_true, Coq_true, Coq_false, Coq_true,
+          Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
+          Coq_false, Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)),
+          (String ((Ascii (Coq_true, Coq_false, Coq_true, Coq_false,
+          Coq_true, Coq_true, Coq_true, Coq_false)), (String ((Ascii
+          (Coq_false, Coq_false, Coq_true, Coq_false, Coq_true, Coq_true,
+          Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
+          Coq_false, Coq_false, Coq_false, Coq_true, Coq_false, Coq_false)),
+          (String ((Ascii (Coq_false, Coq_true, Coq_true, Coq_false,
+          Coq_true, Coq_true, Coq_true, Coq_false)), (String ((Ascii
+          (Coq_true, Coq_false, Coq_false, Coq_false, Coq_false, Coq_true,
+          Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
+          Coq_true, Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)),
+          (String ((Ascii (Coq_true, Coq_false, Coq_false, Coq_true,
+          Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
+          (Coq_false, Coq_false, Coq_true, Coq_false, Coq_false, Coq_true,
+          Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_false,
+          Coq_false, Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)),
+          (String ((Ascii (Coq_false, Coq_false, Coq_true, Coq_false,
+          Coq_true, Coq_true, Coq_true, Coq_false)), (String ((Ascii
+          (Coq_true, Coq_false, Coq_false, Coq_true, Coq_false, Coq_true,
+          Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_true,
+          Coq_true, Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)),
+          (String ((Ascii (Coq_false, Coq_true, Coq_true, Coq_true,
+          Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
+          (Coq_false, Coq_false, Coq_false, Coq_false, Coq_false, Coq_true,
+          Coq_false, Coq_false)), (String ((Ascii (Coq_false, Coq_true,
+          Coq_true, Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)),
+          (String ((Ascii (Coq_true, Coq_false, Coq_false, Coq_false,
+          Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
+          (Coq_true, Coq_false, Coq_false, Coq_true, Coq_false, Coq_true,
+          Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
+          Coq_true, Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)),
+          (String ((Ascii (Coq_true, Coq_false, Coq_true, Coq_false,
+          Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
+          (Coq_false, Coq_false, Coq_true, Coq_false, Coq_false, Coq_true,
+          Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
+          Coq_false, Coq_false, Coq_false, Coq_true, Coq_false, Coq_false)),
+          (String ((Ascii (Coq_true, Coq_false, Coq_false, Coq_true,
+          Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
+          (Coq_false, Coq_true, Coq_true, Coq_true, Coq_false, Coq_true,
+          Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
+          Coq_false, Coq_false, Coq_false, Coq_true, Coq_false, Coq_false)),
+          (String ((Ascii (Coq_false, Coq_false, Coq_true, Coq_true,
+          Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
+          (Coq_true, Coq_false, Coq_false, Coq_false, Coq_false, Coq_true,
+          Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_true,
+          Coq_false, Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)),
+          (String ((Ascii (Coq_true, Coq_false, Coq_true, Coq_false,
+          Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
+          (Coq_false, Coq_false, Coq_true, Coq_true, Coq_false, Coq_true,
+          Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_true,
+          Coq_true, Coq_true, Coq_true, Coq_false, Coq_true, Coq_false)),
+          (String ((Ascii (Coq_false, Coq_true, Coq_true, Coq_false,
+          Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
+          (Coq_true, Coq_false, Coq_true, Coq_false, Coq_true, Coq_true,
+          Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_true,
+          Coq_true, Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)),
+          (String ((Ascii (Coq_true, Coq_true, Coq_false, Coq_false,
+          Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
+          (Coq_false, Coq_false, Coq_true, Coq_false, Coq_true, Coq_true,
+          Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_false,
+          Coq_false, Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)),
+          (String ((Ascii (Coq_true, Coq_true, Coq_true, Coq_true, Coq_false,
+          Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
+          Coq_true, Coq_true, Coq_true, Coq_false, Coq_true, Coq_true,
+          Coq_false)), (String ((Ascii (Coq_true, Coq_true, Coq_false,
+          Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)),
+          EmptyString)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+   | Coq_false ->
+     Error (String ((Ascii (Coq_true, Coq_false, Coq_false, Coq_true,
+       Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
+       (Coq_false, Coq_true, Coq_true, Coq_true, Coq_false, Coq_true,
+       Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
+       Coq_false, Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)),
+       (String ((Ascii (Coq_true, Coq_false, Coq_true, Coq_false, Coq_true,
+       Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
+       Coq_false, Coq_true, Coq_false, Coq_true, Coq_true, Coq_true,
+       Coq_false)), (String ((Ascii (Coq_false, Coq_false, Coq_false,
+       Coq_false, Coq_false, Coq_true, Coq_false, Coq_false)), (String
+       ((Ascii (Coq_false, Coq_true, Coq_true, Coq_false, Coq_true, Coq_true,
+       Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_false,
+       Coq_false, Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)),
+       (String ((Ascii (Coq_false, Coq_false, Coq_true, Coq_true, Coq_false,
+       Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_false,
+       Coq_false, Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)),
+       (String ((Ascii (Coq_false, Coq_false, Coq_true, Coq_false, Coq_false,
+       Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_false,
+       Coq_false, Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)),
+       (String ((Ascii (Coq_false, Coq_false, Coq_true, Coq_false, Coq_true,
+       Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_false,
+       Coq_false, Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)),
+       (String ((Ascii (Coq_true, Coq_true, Coq_true, Coq_true, Coq_false,
+       Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_true,
+       Coq_true, Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)),
+       (String ((Ascii (Coq_false, Coq_false, Coq_false, Coq_false,
+       Coq_false, Coq_true, Coq_false, Coq_false)), (String ((Ascii
+       (Coq_false, Coq_true, Coq_true, Coq_false, Coq_false, Coq_true,
+       Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_false,
+       Coq_false, Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)),
+       (String ((Ascii (Coq_true, Coq_false, Coq_false, Coq_true, Coq_false,
+       Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
+       Coq_false, Coq_true, Coq_true, Coq_false, Coq_true, Coq_true,
+       Coq_false)), (String ((Ascii (Coq_true, Coq_false, Coq_true,
+       Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
+       (Coq_false, Coq_false, Coq_true, Coq_false, Coq_false, Coq_true,
+       Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
+       Coq_false, Coq_false, Coq_false, Coq_true, Coq_false, Coq_false)),
+       (String ((Ascii (Coq_true, Coq_false, Coq_false, Coq_true, Coq_false,
+       Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_true,
+       Coq_true, Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)),
+       (String ((Ascii (Coq_false, Coq_false, Coq_false, Coq_false,
+       Coq_false, Coq_true, Coq_false, Coq_false)), (String ((Ascii
+       (Coq_false, Coq_false, Coq_true, Coq_true, Coq_false, Coq_true,
+       Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_false,
+       Coq_false, Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)),
+       (String ((Ascii (Coq_false, Coq_true, Coq_false, Coq_false, Coq_false,
+       Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_false,
+       Coq_true, Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)),
+       (String ((Ascii (Coq_false, Coq_false, Coq_true, Coq_true, Coq_false,
+       Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_true,
+       Coq_true, Coq_true, Coq_true, Coq_false, Coq_true, Coq_false)),
+       (String ((Ascii (Coq_false, Coq_true, Coq_true, Coq_false, Coq_false,
+       Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_false,
+       Coq_true, Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)),
+       (String ((Ascii (Coq_false, Coq_true, Coq_true, Coq_true, Coq_false,
+       Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_true,
+       Coq_false, Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)),
+       (String ((Ascii (Coq_false, Coq_false, Coq_true, Coq_false, Coq_true,
+       Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_false,
+       Coq_false, Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)),
+       (String ((Ascii (Coq_true, Coq_true, Coq_true, Coq_true, Coq_false,
+       Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_true,
+       Coq_true, Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)),
+       (String ((Ascii (Coq_true, Coq_true, Coq_false, Coq_false, Coq_true,
+       Coq_true, Coq_true, Coq_false)),
+       EmptyString)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
 
-(** val stacked_program : Language2.program -> program optErr **)
+(** val clabeled_program : genv -> program optErr **)
 
-let stacked_program = function
-| Coq_pair (ge, body) ->
-  bind (Obj.magic coq_Monad_optErr) (Obj.magic stacked_genv ge) (fun cge ->
-    match label_functions cge.Genv.genv_fundefs with
-    | Coq_true ->
-      (match label_methods cge.Genv.genv_methoddefs with
-       | Coq_true -> ret (Obj.magic coq_Monad_optErr) (Coq_pair (cge, body))
-       | Coq_false ->
-         Error (String ((Ascii (Coq_false, Coq_false, Coq_true, Coq_true,
-           Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-           (Coq_true, Coq_false, Coq_false, Coq_false, Coq_false, Coq_true,
-           Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_true,
-           Coq_false, Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)),
-           (String ((Ascii (Coq_true, Coq_false, Coq_true, Coq_false,
-           Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-           (Coq_false, Coq_false, Coq_true, Coq_true, Coq_false, Coq_true,
-           Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_true,
-           Coq_true, Coq_true, Coq_true, Coq_false, Coq_true, Coq_false)),
-           (String ((Ascii (Coq_false, Coq_true, Coq_true, Coq_false,
-           Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-           (Coq_true, Coq_false, Coq_true, Coq_false, Coq_true, Coq_true,
-           Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_true,
-           Coq_true, Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)),
-           (String ((Ascii (Coq_true, Coq_true, Coq_false, Coq_false,
-           Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-           (Coq_false, Coq_false, Coq_true, Coq_false, Coq_true, Coq_true,
-           Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_false,
-           Coq_false, Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)),
-           (String ((Ascii (Coq_true, Coq_true, Coq_true, Coq_true,
-           Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-           (Coq_false, Coq_true, Coq_true, Coq_true, Coq_false, Coq_true,
-           Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_true,
-           Coq_false, Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)),
-           (String ((Ascii (Coq_true, Coq_true, Coq_true, Coq_true,
-           Coq_false, Coq_true, Coq_false, Coq_false)), (String ((Ascii
-           (Coq_false, Coq_false, Coq_true, Coq_true, Coq_false, Coq_true,
-           Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_false,
-           Coq_false, Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)),
-           (String ((Ascii (Coq_false, Coq_true, Coq_false, Coq_false,
-           Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-           (Coq_true, Coq_false, Coq_true, Coq_false, Coq_false, Coq_true,
-           Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
-           Coq_true, Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)),
-           (String ((Ascii (Coq_true, Coq_true, Coq_true, Coq_true, Coq_true,
-           Coq_false, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
-           Coq_false, Coq_true, Coq_true, Coq_false, Coq_true, Coq_true,
-           Coq_false)), (String ((Ascii (Coq_true, Coq_false, Coq_true,
-           Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)), (String
-           ((Ascii (Coq_false, Coq_false, Coq_true, Coq_false, Coq_true,
-           Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
-           Coq_false, Coq_false, Coq_true, Coq_false, Coq_true, Coq_true,
-           Coq_false)), (String ((Ascii (Coq_true, Coq_true, Coq_true,
-           Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)), (String
-           ((Ascii (Coq_false, Coq_false, Coq_true, Coq_false, Coq_false,
-           Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
-           Coq_true, Coq_false, Coq_false, Coq_true, Coq_true, Coq_true,
-           Coq_false)), (String ((Ascii (Coq_false, Coq_false, Coq_false,
-           Coq_false, Coq_false, Coq_true, Coq_false, Coq_false)), (String
-           ((Ascii (Coq_false, Coq_true, Coq_true, Coq_false, Coq_false,
-           Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
-           Coq_false, Coq_false, Coq_false, Coq_false, Coq_true, Coq_true,
-           Coq_false)), (String ((Ascii (Coq_true, Coq_false, Coq_false,
-           Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)), (String
-           ((Ascii (Coq_false, Coq_false, Coq_true, Coq_true, Coq_false,
-           Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
-           Coq_false, Coq_true, Coq_false, Coq_false, Coq_true, Coq_true,
-           Coq_false)), (String ((Ascii (Coq_false, Coq_false, Coq_true,
-           Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)),
-           EmptyString)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
-    | Coq_false ->
-      Error (String ((Ascii (Coq_false, Coq_false, Coq_true, Coq_true,
-        Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-        (Coq_true, Coq_false, Coq_false, Coq_false, Coq_false, Coq_true,
-        Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_true,
-        Coq_false, Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)),
-        (String ((Ascii (Coq_true, Coq_false, Coq_true, Coq_false, Coq_false,
-        Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
-        Coq_false, Coq_true, Coq_true, Coq_false, Coq_true, Coq_true,
-        Coq_false)), (String ((Ascii (Coq_true, Coq_true, Coq_true, Coq_true,
-        Coq_true, Coq_false, Coq_true, Coq_false)), (String ((Ascii
-        (Coq_false, Coq_true, Coq_true, Coq_false, Coq_false, Coq_true,
-        Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_false,
-        Coq_true, Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)),
-        (String ((Ascii (Coq_false, Coq_true, Coq_true, Coq_true, Coq_false,
-        Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_true,
-        Coq_false, Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)),
-        (String ((Ascii (Coq_false, Coq_false, Coq_true, Coq_false, Coq_true,
-        Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
-        Coq_false, Coq_false, Coq_true, Coq_false, Coq_true, Coq_true,
-        Coq_false)), (String ((Ascii (Coq_true, Coq_true, Coq_true, Coq_true,
-        Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-        (Coq_false, Coq_true, Coq_true, Coq_true, Coq_false, Coq_true,
-        Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_true,
-        Coq_false, Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)),
-        (String ((Ascii (Coq_true, Coq_true, Coq_true, Coq_true, Coq_false,
-        Coq_true, Coq_false, Coq_false)), (String ((Ascii (Coq_false,
-        Coq_false, Coq_true, Coq_true, Coq_false, Coq_true, Coq_true,
-        Coq_false)), (String ((Ascii (Coq_true, Coq_false, Coq_false,
-        Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)), (String
-        ((Ascii (Coq_false, Coq_true, Coq_false, Coq_false, Coq_false,
-        Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
-        Coq_false, Coq_true, Coq_false, Coq_false, Coq_true, Coq_true,
-        Coq_false)), (String ((Ascii (Coq_false, Coq_false, Coq_true,
-        Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-        (Coq_true, Coq_true, Coq_true, Coq_true, Coq_true, Coq_false,
-        Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_false,
-        Coq_true, Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)),
-        (String ((Ascii (Coq_true, Coq_false, Coq_true, Coq_false, Coq_false,
-        Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
-        Coq_false, Coq_true, Coq_false, Coq_true, Coq_true, Coq_true,
-        Coq_false)), (String ((Ascii (Coq_false, Coq_false, Coq_false,
-        Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-        (Coq_true, Coq_true, Coq_true, Coq_true, Coq_false, Coq_true,
-        Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
-        Coq_true, Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)),
-        (String ((Ascii (Coq_true, Coq_true, Coq_false, Coq_false, Coq_true,
-        Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
-        Coq_false, Coq_false, Coq_false, Coq_false, Coq_true, Coq_false,
-        Coq_false)), (String ((Ascii (Coq_false, Coq_true, Coq_true,
-        Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)), (String
-        ((Ascii (Coq_true, Coq_false, Coq_false, Coq_false, Coq_false,
-        Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
-        Coq_false, Coq_false, Coq_true, Coq_false, Coq_true, Coq_true,
-        Coq_false)), (String ((Ascii (Coq_false, Coq_false, Coq_true,
-        Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-        (Coq_true, Coq_false, Coq_true, Coq_false, Coq_false, Coq_true,
-        Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
-        Coq_true, Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)),
-        EmptyString)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+let clabeled_program ge =
+  let lm = allocate_labels_ge ge in
+  bind (Obj.magic coq_Monad_optErr) (Obj.magic clabeled_genv lm ge)
+    (fun cge ->
+    bind (Obj.magic coq_Monad_optErr)
+      (Obj.magic label_key lm (Coq_inl Lbody)) (fun body ->
+      ret (Obj.magic coq_Monad_optErr) (Coq_pair (cge, body))))

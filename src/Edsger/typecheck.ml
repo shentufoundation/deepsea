@@ -1,3 +1,5 @@
+#include "config.h"
+
 open Ast
 open Astcommon
 open Parsetree
@@ -32,7 +34,11 @@ let locationinfo_print loc filename =
     else "File \"" ^ filename ^ "\"" ^ "," ^ " line " ^ ((string_of_int loc.loc_start.pos_lnum) ^ " between " ^ (string_of_int loc.loc_end.pos_lnum)) ^ ":" ;;
 
 (* The length of an address, this is 20 bytes in Ethereum and 32 bytes in Ant Chain. *)
+#ifdef ANT
+let address_length = 32
+#else
 let address_length = 20
+#endif
 
 (* Does not belong here *)
 let function_start_id_num = 10
@@ -193,7 +199,7 @@ let dummy_layer_type i =
 let dummy_rexpr =
   { aRexprDesc = AEtemp (-1, "*DUMMY*"); aRexprType = dummy_type "*DUMMY*" }
 let dummy_lexpr =
-  { aLexprDesc = AEvar "*DUMMY*"; aLexprType = dummy_type "*DUMMY*"; aLexprIsGhost = false }
+  { aLexprDesc = AEglob "*DUMMY*"; aLexprType = dummy_type "*DUMMY*"; aLexprIsGhost = false }
 let dummy_big_expr =
   { aBigExprDesc = AErexpr dummy_rexpr; aBigExprType = dummy_rexpr.aRexprType }
 let dummy_object i =
@@ -233,7 +239,7 @@ exception UnsupportedConstrAnnotation
 
 let parse_constr_annotations ctype_env annos =
   let rec parse_expression e = match e.p_expression_desc with
-    | PEvar i ->
+    | PEglob i ->
       begin match Hashtbl.find_opt ctype_env i with
       | None -> raise UnsupportedConstrAnnotation
       | Some ct -> { aImplDesc = ACvar i; aImplType = ct }
@@ -251,7 +257,7 @@ let parse_constr_annotations ctype_env annos =
       if e1'.aImplType = ACtint && e2'.aImplType = ACtint
         then { aImplDesc = ACtimes (e1', e2'); aImplType = ACtint }
         else raise UnsupportedConstrAnnotation
-    | PEapp ({p_expression_desc = (PEvar "array_init"); p_expression_loc = _}, [e]) -> (* PEvar "array_init"  *)
+    | PEapp ({p_expression_desc = (PEglob "array_init"); p_expression_loc = _}, [e]) -> (* PEglob "array_init"  *)
       let e' = parse_expression e in
       { aImplDesc = ACarray e'; aImplType = ACtarray (0, e'.aImplType) }
     | PEstruct lst ->
@@ -1079,10 +1085,10 @@ let typecheck parsed filename =
       aLayerSignature = translate_layer_signature (i ^ "_ifc") t.pLayerSignature } in
 
   let rec translate_expression var_env tmp_env exp = match exp.p_expression_desc with
-    | PEvar "keccak256" ->
+    | PEglob "keccak256" ->
          (report_error ("keccak256 requires 1 or 2 arguments, but were given 0.") exp.p_expression_loc);
          `RExpr dummy_rexpr
-    | PEvar i -> begin
+    | PEglob i -> begin
       try let tmp_id, t = List.assoc i tmp_env
           in `RExpr { aRexprDesc = AEtemp (tmp_id, i); aRexprType = t }
       with Not_found ->
@@ -1181,7 +1187,7 @@ let typecheck parsed filename =
         aBigExprType = t
       }
 
-    | PEapp ({p_expression_desc = (PEvar "keccak256"); p_expression_loc = _ }, [{p_expression_desc = PEpair (e1, e2); p_expression_loc = _ }]) ->
+    | PEapp ({p_expression_desc = (PEglob "keccak256"); p_expression_loc = _ }, [{p_expression_desc = PEpair (e1, e2); p_expression_loc = _ }]) ->
       let e1' = translate_rexpr var_env tmp_env e1 in
       let e2' = translate_rexpr var_env tmp_env e2 in
       begin match binop_type OPsha_2 e1'.aRexprType e2'.aRexprType with
@@ -1192,7 +1198,7 @@ let typecheck parsed filename =
         `RExpr { aRexprDesc = AEbinop (OPsha_2, e1', e2'); aRexprType = dummy_type "*BINOP*" }
       end
 
-    | PEapp ({p_expression_desc = (PEvar "keccak256"); p_expression_loc = _}, [e]) ->
+    | PEapp ({p_expression_desc = (PEglob "keccak256"); p_expression_loc = _}, [e]) ->
       let e' = translate_rexpr var_env tmp_env e in
       begin match unop_type OPsha_1 e'.aRexprType with
       | Some t -> `RExpr { aRexprDesc = AEunop (OPsha_1, e'); aRexprType = t }
@@ -1202,7 +1208,7 @@ let typecheck parsed filename =
         `RExpr { aRexprDesc = AEunop (OPsha_1, e'); aRexprType = dummy_type "*UNOP*" }
       end
 
-    | PEapp ({p_expression_desc = (PEvar i); p_expression_loc = _}, es) when i = "fst" || i = "snd" -> begin
+    | PEapp ({p_expression_desc = (PEglob i); p_expression_loc = _}, es) when i = "fst" || i = "snd" -> begin
       match es with
       | [] | _ :: _ :: _ ->
         report_error (i ^ " only takes one argument; " ^
@@ -1222,7 +1228,7 @@ let typecheck parsed filename =
       end
 
     (* TODO: *)
-    | PEapp ({p_expression_desc = (PEvar i); p_expression_loc = _}, es) when i = "array_sets" -> begin
+    | PEapp ({p_expression_desc = (PEglob i); p_expression_loc = _}, es) when i = "array_sets" -> begin
         let ct = begin match es with
         | e::_ -> 
           let e' = translate_big_expr var_env tmp_env e in
@@ -1248,7 +1254,7 @@ let typecheck parsed filename =
         in `BigExpr { aBigExprDesc = AEconstr (c, params); aBigExprType = t }
     end
 
-    | PEapp ({p_expression_desc = (PEvar i); p_expression_loc = _}, es) ->
+    | PEapp ({p_expression_desc = (PEglob i); p_expression_loc = _}, es) ->
        begin
        match Hashtbl.find_opt ethbuiltins_environment i with
        | Some (argtypes, {aRexprDesc=AEbuiltin (bi,_); aRexprType=rt})  ->
@@ -1407,13 +1413,13 @@ let typecheck parsed filename =
           " arrays can only be indexed by integers") exp.p_expression_loc;
         `LExpr dummy_lexpr
       | ATmapping (tkey, tval), t ->
-   if tkey.aTypeDesc <> t then 
-     begin report_error ("The index expression has type " ^ (string_of_a_type false idx'.aRexprType)
-        ^ " but should have type " ^ (string_of_a_type false tkey) ^ ".") exp.p_expression_loc;
-     `LExpr dummy_lexpr end
-   else
-     `LExpr { aLexprDesc = AEhash (e', idx');
-        aLexprType = tval;
+	 if tkey.aTypeDesc <> t then 
+	   begin report_error ("The index expression has type " ^ (string_of_a_type false idx'.aRexprType)
+			  ^ " but should have type " ^ (string_of_a_type false tkey) ^ ".");
+		 `LExpr dummy_lexpr end
+	 else
+	   `LExpr { aLexprDesc = AEindex (e', idx');
+		    aLexprType = tval;
         aLexprIsGhost = e'.aLexprIsGhost }                   
       | _ -> report_error (string_of_a_type false e'.aLexprType ^ " is not an" ^
                " array type; only array types can be accessed through indexing") exp.p_expression_loc;
@@ -1479,22 +1485,22 @@ let typecheck parsed filename =
                         | PEstruct lst ->
                             List.map (fun (id, pe) ->
                                 (let le = {
-                                          aLexprDesc = AEvar(ident);
+                                          aLexprDesc = AEglob(ident);
                                           aLexprType = translate_type t;
                                           aLexprIsGhost = is_ghost
                                         } in 
                                   {aLexprDesc = AEfield(le, id); aLexprType = translate_type t; aLexprIsGhost = is_ghost; })) lst
-                        | PEvar("array_init") -> []
+                        | PEglob("array_init") -> []
                         | PEconstant(CONhashvalue) -> []
-                        | PEvar("mapping_init") -> []
-                        | _ -> [{aLexprDesc = AEvar(ident); aLexprType = translate_type t; aLexprIsGhost = is_ghost; }]
+                        | PEglob("mapping_init") -> []
+                        | _ -> [{aLexprDesc = AEglob(ident); aLexprType = translate_type t; aLexprIsGhost = is_ghost; }]
                       in
     let rexpr_list = match e.p_expression_desc with
                         | PEstruct lst -> 
                             List.map (fun (id, pe) -> (translate_rexpr (empty_var_env ()) (empty_tmp_env ()) pe)) lst
-                        | PEvar("array_init") -> []
+                        | PEglob("array_init") -> []
                         | PEconstant(CONhashvalue) -> []
-                        | PEvar("mapping_init") -> []  
+                        | PEglob("mapping_init") -> []  
                         | _ ->
                             let e_toConstructor = translate_rexpr (empty_var_env ()) (empty_tmp_env ()) e in
                                         [e_toConstructor] 
@@ -1605,7 +1611,7 @@ let typecheck parsed filename =
       next_id'
     in match cmd.p_command_desc with
       (* | PCskip -> ACskip, tvoid_unit, next_id *)
-      | PCyield ({p_expression_desc = PEapp ({p_expression_desc = (PEfield ({p_expression_desc = (PEvar s); p_expression_loc = _}, m)); p_expression_loc = _ }, arg :: rest); p_expression_loc = _ }) ->
+      | PCyield ({p_expression_desc = PEapp ({p_expression_desc = (PEfield ({p_expression_desc = (PEglob s); p_expression_loc = _}, m)); p_expression_loc = _ }, arg :: rest); p_expression_loc = _ }) ->
         if rest <> [] then
           report_warning ("More than one (currying) argument for primitive call " ^
             s ^ "." ^ m ^ ": ignored") cmd.p_command_loc;
@@ -1622,8 +1628,8 @@ let typecheck parsed filename =
                                                arg mt.aMethodArgumentTypes)
         end
 
-      | PCyield ({p_expression_desc = (PEvar v); p_expression_loc = _})
-      | PCstore (_, ({p_expression_desc = (PEvar v); p_expression_loc = _}))
+      | PCyield ({p_expression_desc = (PEglob v); p_expression_loc = _})
+      | PCstore (_, ({p_expression_desc = (PEglob v); p_expression_loc = _}))
           when Hashtbl.mem external_const_environment v ->
         let s, i, t = match Hashtbl.find external_const_environment v with
           | { aBigExprDesc = AEexternal_const (s, i); aBigExprType = t } ->
@@ -1638,8 +1644,8 @@ let typecheck parsed filename =
         return next_id res_t { eff with invokesLogical = true } @@
           ACexternal (dest, s, i, [])
 
-      | PCyield ({p_expression_desc = PEapp ({p_expression_desc =  (PEvar f); p_expression_loc = _ }, arg :: rest); p_expression_loc = _})
-      | PCstore (_, {p_expression_desc = PEapp ({p_expression_desc = (PEvar f); p_expression_loc = _ }, arg :: rest); p_expression_loc = _ })
+      | PCyield ({p_expression_desc = PEapp ({p_expression_desc =  (PEglob f); p_expression_loc = _ }, arg :: rest); p_expression_loc = _})
+      | PCstore (_, {p_expression_desc = PEapp ({p_expression_desc = (PEglob f); p_expression_loc = _ }, arg :: rest); p_expression_loc = _ })
           when Hashtbl.mem external_function_environment f ->
         let (s, mt) = Hashtbl.find external_function_environment f in
         let dest, res_t, eff = match cmd.p_command_desc with
@@ -1834,7 +1840,7 @@ let typecheck parsed filename =
           in return next_id tvoid_unit eff @@ ACconstr (el', er'')
         end
 
-      | PCemit ({p_expression_desc = PEapp ({p_expression_desc = (PEvar f); p_expression_loc = _ }, args :: rest); p_expression_loc = _}) -> begin
+      | PCemit ({p_expression_desc = PEapp ({p_expression_desc = (PEglob f); p_expression_loc = _ }, args :: rest); p_expression_loc = _}) -> begin
         if rest <> [] then
           report_warning ("More than one (currying) argument for event " ^
             f ^": ignored") cmd.p_command_loc;
@@ -2215,7 +2221,7 @@ let typecheck parsed filename =
                           c.pObjFields in
     let var_env = empty_var_env () in
     let _ = List.iter (fun f -> Hashtbl.add var_env f.aObjectFieldName
-        { aLexprDesc = AEvar f.aObjectFieldName;
+        { aLexprDesc = AEglob f.aObjectFieldName;
           aLexprType = f.aObjectFieldType;
           aLexprIsGhost = f.aObjectFieldIsLogical }
       ) fields in

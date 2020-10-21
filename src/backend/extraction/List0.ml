@@ -11,6 +11,12 @@ let rec in_dec h a = function
    | Coq_left -> Coq_left
    | Coq_right -> in_dec h a l0)
 
+(** val rev : 'a1 list -> 'a1 list **)
+
+let rec rev = function
+| Coq_nil -> Coq_nil
+| Coq_cons (x, l') -> app (rev l') (Coq_cons (x, Coq_nil))
+
 (** val rev_append : 'a1 list -> 'a1 list -> 'a1 list **)
 
 let rec rev_append l l' =

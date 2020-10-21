@@ -24,7 +24,3 @@ val retpos : coq_Z
 val retlen : nat -> coq_Z
 
 val call_data_arg_location : nat -> Int256.int
-
-val bytes_to_fetch : Int256.int
-
-val coq_MemoryLocation : Int256.int

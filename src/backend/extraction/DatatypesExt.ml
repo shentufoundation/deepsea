@@ -1,8 +1,11 @@
 module D = Datatypes
 
-let rec eval_nat = function
-  | D.O -> 0
-  | D.S rest -> (eval_nat rest) + 1
+let rec eval_nat_tail d n = 
+  match d with
+  | D.O -> n
+  | D.S rest -> (eval_nat_tail rest (n+1))
+
+let rec eval_nat d = eval_nat_tail d 0
 
 let rec caml_list = function
   | D.Coq_nil -> []
@@ -18,6 +21,10 @@ let caml_bool = function
 let caml_option = function
   | D.Some a -> Some a
   | D.None -> None
+
+let coq_option = function
+  | Some a -> D.Some a
+  | None -> D.None
 
 let bit_of_bool = function
   | D.Coq_true -> 1
@@ -37,3 +44,7 @@ let char_of_ascii = function
 let rec caml_string = function
   | String0.EmptyString -> ""
   | String0.String(a, s) -> String.make 1 (char_of_ascii a) ^ caml_string s
+
+let rec coqlist_of_list = function
+  | [] -> D.Coq_nil
+  | x::xs -> D.(Coq_cons (x, coqlist_of_list xs))

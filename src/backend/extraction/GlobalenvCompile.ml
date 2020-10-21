@@ -7,8 +7,8 @@ open Ctypes
 open Datatypes
 open Globalenvs
 open Integers
-open Language6
-open Language7
+open Language
+open Language0
 open List0
 open Maps0
 open Monad
@@ -75,19 +75,19 @@ let rec allocate_addrs vars next_addr defs =
         (allocate_addrs rest (Z.add next_addr size) defs) (fun allocated ->
         ret (Obj.magic coq_Monad_optErr) (PTree.set id next_addr allocated)))
 
-(** val allocations : Language6.genv -> coq_Z PTree.t optErr **)
+(** val allocations : Language.genv -> coq_Z PTree.t optErr **)
 
 let allocations ge =
   allocate_addrs ge.genv_vars Z0 ge.genv_defs
 
-(** val genv_compiled : Language6.genv -> compiled **)
+(** val genv_compiled : Language.genv -> compiled **)
 
 let genv_compiled ge =
   bind (Obj.magic coq_Monad_optErr) (Obj.magic allocations ge)
     (fun allocated ->
     code_compiled ge.genv_main allocated ge.genv_main_entrypoint)
 
-(** val get_main_entrypoint : Language6.genv -> label optErr **)
+(** val get_main_entrypoint : Language.genv -> label optErr **)
 
 let get_main_entrypoint ge =
   ret (Obj.magic coq_Monad_optErr) ge.genv_main_entrypoint
@@ -150,10 +150,10 @@ let rec construct_wasm_opt_func_list l type_ind =
   match l with
   | Coq_nil -> { fl = Coq_nil; ti = type_ind; mtypes = Coq_nil }
   | Coq_cons (x, xs) ->
-    let ttype = wasm_opt_funtype x in
     let tfunc = wasm_opt_to_func x type_ind in
     let rst = construct_wasm_opt_func_list xs tfunc.ti in
-    { fl = (app tfunc.fl rst.fl); ti = rst.ti; mtypes = ttype }
+    { fl = (app tfunc.fl rst.fl); ti = rst.ti; mtypes =
+    (app tfunc.mtypes rst.mtypes) }
 
 type method_rec = { flnt : func_list_n_type; mabi : Int.int list }
 

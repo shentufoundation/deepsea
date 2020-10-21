@@ -15,7 +15,7 @@ type p_expression = {
   p_expression_loc : location;
 }
 and p_expression_desc =
-    PEvar of Astcommon.ident
+    PEglob of Astcommon.ident
   | PEconstant of Astcommon.constant
   | PEun of Astcommon.unop * p_expression
   | PEbin of Astcommon.binop * p_expression * p_expression

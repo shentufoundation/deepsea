@@ -53,7 +53,7 @@ type evm =
 | Coq_evm_sstore
 | Coq_evm_jump
 | Coq_evm_jumpi
-| Coq_evm_totallength
+| Coq_evm_totallength of nat
 | Coq_evm_label of label
 | Coq_evm_push of Int256.int
 | Coq_evm_push_label of label

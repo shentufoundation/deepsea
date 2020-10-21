@@ -2,8 +2,11 @@ open Ast
 open Astcommon
 open Abi
 
-open Backend.Language       
-
+open Backend
+  open StmtMiniC
+  open ExpMiniC
+  module D = Datatypes
+  open DatatypesExt
        
 type coqgen_env = {
   filename : string;
@@ -25,7 +28,7 @@ let module_name_regexp = Str.regexp "[a-zA-Z_][a-zA-Z0-9_']*"
 let default_module_name = "EdsgerGen"
 let builtin_base_layer_name = "BuiltinBase"
 
-let new_coqgen_env filename  ast =
+let new_coqgen_env filename ast =
   let project_name =
     let basename = Filename.basename filename in
     if Str.string_match module_name_regexp basename 0 then
@@ -171,6 +174,8 @@ let backend_ident_of_globvar  = ident_generator "var_"
 let backend_ident_of_funcname = ident_generator "ident_"
 let backend_ident_of_tempvar i = positive_of_int i
 				    
+let methods_tbl = Hashtbl.create 0
+
 let rec gen_ctype =
   let open Backend.Ctypes in 
   function    
@@ -450,8 +455,8 @@ let rec gen_lexpr obj e =
   let open Backend.Integers in
   let open Backend.Language in
   match e.aLexprDesc with
-  | AEvar i ->
-     Evar (backend_ident_of_globvar obj i,
+  | AEglob i ->
+     Eglob (backend_ident_of_globvar obj i,
 	   gen_ctype e.aLexprType.aTypeCtype)
   | AEfield (e', f) ->
      Efield (gen_lexpr obj e',
@@ -463,9 +468,7 @@ let rec gen_lexpr obj e =
 		   end,
 		   gen_ctype e.aLexprType.aTypeCtype)
   | AEindex (e', idx) ->
-    Earrayderef (gen_lexpr obj e', gen_rexpr idx, gen_ctype e.aLexprType.aTypeCtype)
-  | AEhash (e', idx) ->
-    Ehashderef (gen_lexpr obj e',  gen_rexpr idx, gen_ctype e.aLexprType.aTypeCtype)
+    Eindex (gen_lexpr obj e', gen_rexpr idx, gen_ctype e.aLexprType.aTypeCtype)
 
 
 
@@ -824,13 +827,14 @@ let rec string_of_expr = function
   | Econst_int (z, t) -> ("Econst_int (" ^ string_of_int (int_of_z z) ^ ","^string_of_ctype t^")")
   | Econst_int256 (z, t) -> ("Econst_int (" ^ string_of_int (int_of_z z) ^ ","^string_of_ctype t^")")
   | Evar (id,t) -> ("Evar("^string_of_int (int_of_positive id)^","^string_of_ctype t^")")
+  | Eglob (id,t) -> ("Eglob("^string_of_int (int_of_positive id)^","^string_of_ctype t^")")
   | Etempvar (id,t) -> ("Etempvar("^string_of_int (int_of_positive id)^","^string_of_ctype t^")")
   | Ederef (e,t) -> ("Ederef(" ^ string_of_expr e ^","^ string_of_ctype t ^")")
+  | Eaddr (e,t) -> ("Eaddr(" ^ string_of_expr e ^","^ string_of_ctype t ^")")
   | Eunop (op,e,t) -> ("Eunop(OP,"^string_of_expr e^","^string_of_ctype t ^")")
   | Ebinop (op,e1,e2,t) -> ("Ebinop(OP,"^string_of_expr e1^","^string_of_expr e2^","^string_of_ctype t ^")")
   | Efield (e, ident, t) ->("Efield("^string_of_expr e^","^string_of_int (int_of_positive ident)^","^string_of_ctype t^")")
-  | Earrayderef (e1,e2,t) -> ("Earrayderef("^string_of_expr e1 ^","^string_of_expr e2^","^string_of_ctype t^")")
-  | Ehashderef (e1,e2,t) -> ("Ehashderef("^string_of_expr e1 ^","^string_of_expr e2^","^string_of_ctype t^")")
+  | Eindex (e1,e2,t) -> ("Eindex("^string_of_expr e1 ^","^string_of_expr e2^","^string_of_ctype t^")")
   | Ecall0 (bt,t) -> "Ecall0(BUILTIN,TYPE)"
   | Ecall1 (bt,e,t) -> "Ecall0(BUILTIN,EXPR,TYPE)"
 
@@ -845,7 +849,7 @@ let rec string_of_statement = function
   | Sloop s -> "(Sloop "^string_of_statement s^")"
   | Sbreak -> "Sbreak"
   | Sreturn None -> "Sreturn None"
-  | Sreturn (Some e) -> ("Sreturn Some("^string_of_expr e^")")		      
+  | Sreturn (Some id) -> ("Sreturn Some("^string_of_int (int_of_positive id)^")")		      
   | Stransfer (e1,e2) -> "Stransfer ("^string_of_expr e1 ^","^ string_of_expr e2 ^")"
   | Scallmethod (e1,ids,z,e,es) -> "Scallmethod TODO"
   | Slog _ -> "Slog TODO" 
@@ -861,6 +865,7 @@ let string_of_methoddef md =
    "{ fn_return = " ^ string_of_ctype md.fn_return ^ ";\n"
   ^"  fn_params = " ^ string_of_params md.fn_params ^";\n"
   ^"  fn_temps =  " ^ string_of_params md.fn_temps ^";\n"
+  ^"  fn_locals = " ^ string_of_params md.fn_locals ^";\n"
   ^"  fn_body = " ^ string_of_statement md.fn_body ^"\n"
   ^"}"
      
@@ -957,10 +962,10 @@ let gen_methoddef underlay objname m =
     fn_params = coqlist_of_list (gen_params m.aMethodParamEnv);
     fn_temps  = coqlist_of_list (gen_tempenv ((dest,mt.aMethodReturnType.aTypeCtype)
 					      :: gen_cmd_locals m.aMethodBody dest));
+    fn_locals = coqlist_of_list [];
     fn_body =  (if has_return then
                   Ssequence (body,
-			     (Sreturn (Some (Etempvar (positive_of_int dest,
-						       ret_type)))))
+			                      (Sreturn (Some (positive_of_int dest))))
 		else
 		  Ssequence (body, Sreturn None))
   }
@@ -974,23 +979,36 @@ let gen_method_stub underlay objname m =
   { fn_return = ret_type ;
     fn_params = coqlist_of_list params ;
     fn_temps  = coqlist_of_list [Coq_pair (positive_of_int dest, ret_type)] ;
+    fn_locals = coqlist_of_list [];
     fn_body =  Ssequence (Scall (Some (positive_of_int dest),
 				 backend_ident_of_funcname objname m.aMethodName,
 				 (coqlist_of_list (List.map (fun (Coq_pair (x,t)) -> (Etempvar (x, t))) params))),
-			  Sreturn (Some (Etempvar (positive_of_int dest, ret_type))))
+			    Sreturn (Some (positive_of_int dest)))
   }
 
+(* An issue might arise if constructors have temps with the same idents but
+* different types. *)
+let remove_duplicates tbl temps =
+  coqlist_of_list (List.filter
+    (fun pair ->
+      let ident = D.fst pair in
+      let found = Hashtbl.mem tbl ident in
+      Hashtbl.add tbl ident true;
+      not found
+    )
+    (caml_list temps)
+  )
+
 let concat_constructor f g =
-  let open Backend.Datatypes in
-    let f_statement = f.fn_body in 
-    let g_statement = g.fn_body in 
-    Some 
+  let tmp_tbl = Hashtbl.create 0 in
+    D.Some
     { fn_return = f.fn_return;
-      fn_params = app f.fn_params g.fn_params;
-      fn_temps = app f.fn_temps g.fn_temps;
-      fn_body = Ssequence (f_statement, g_statement);
+      fn_params = remove_duplicates tmp_tbl (D.app f.fn_params g.fn_params);
+      fn_temps = remove_duplicates tmp_tbl (D.app f.fn_temps g.fn_temps);
+      fn_locals = coqlist_of_list [];
+      fn_body = Ssequence (f.fn_body, g.fn_body);
     }
-    
+
 (* When there are multiple objects or multiple layers, we just concatenate together the code for all of them. The constructors from different layers also concatenate together and parameters in constructor is not work for now *)    
 let concat_genv genv1 genv2 =
   let open Backend.Datatypes in
@@ -1046,7 +1064,7 @@ let last_and_rest xs =
   | [] -> None
   | y::ys -> Some (y, List.rev ys)
 
-let gen_constructor make_methname gen_methoddef underlay o last_layer =  
+let gen_constructor gen_methoddef underlay o last_layer =
   let open Backend.Datatypes in
   let dest = builtinBase_local_ident_start_constructor_temp in
   let constructor_list = (List.filter (fun x -> x.aMethodType.aMethodKind == MKconstructor ) o.aObjectMethods) in
@@ -1060,10 +1078,16 @@ let gen_constructor make_methname gen_methoddef underlay o last_layer =
              fn_params = coqlist_of_list params;
              fn_temps  = coqlist_of_list (gen_tempenv ((dest,mt.aMethodReturnType.aTypeCtype)
                           :: gen_cmd_locals constructor_method.aMethodBody dest));
+             fn_locals = coqlist_of_list [];
              fn_body = if last_layer
                        then Ssequence (body, (Sreturn None))
                        else body
         }
+
+let make_methname m =
+  let i = coq_Z_of_int (function_selector_intval_of_method m) in
+  Hashtbl.add methods_tbl i m.aMethodName;
+  i
 
 (* For the last layer we have to make "methods" instead of functions,
    and additionally we need to make "shim methods" for any functions
@@ -1072,7 +1096,6 @@ let gen_object underlay last_layer o =
   let open Backend.Datatypes in
   let open Backend.Globalenvs.Genv in
   let make_funcname m = backend_ident_of_funcname o.aObjectName m.aMethodName in
-  let make_methname m = coq_Z_of_int (function_selector_intval_of_method m) in
   new_genv (gen_object_fields o)
 	   (if not last_layer
 	    then gen_object_methods make_funcname gen_methoddef underlay o
@@ -1080,12 +1103,11 @@ let gen_object underlay last_layer o =
 	   (if last_layer
 	    then gen_object_methods make_methname gen_methoddef underlay o
 	    else Coq_nil)
-     (gen_constructor make_methname gen_methoddef underlay o last_layer)
+     (gen_constructor gen_methoddef underlay o last_layer)
 
 let gen_object_stubs underlay o =
   let open Backend.Datatypes in
   let open Backend.Globalenvs.Genv in
-  let make_methname m = coq_Z_of_int (function_selector_intval_of_method m) in
   new_genv Coq_nil
 	   Coq_nil
 	   (gen_object_methods make_methname gen_method_stub underlay o)
@@ -1100,7 +1122,20 @@ let gen_layer last_layer l =
 		  @(List.map (fun (_,o) -> gen_object_stubs underlay o)
 			     l.aLayerPassthroughObjects))		  
 
-let minicgen filename ast =
+let add_by_prefix tbl prefix of_int id n =
+  let len = String.length prefix in
+  let real_prefix = String.sub id 0 len in
+  if real_prefix = prefix then
+    Hashtbl.add tbl (of_int n) (String.sub id len ((String.length id)-len))
+
+let gen_name_tables () =
+  let nt = Backend.NameTablesExt.empty_name_tables in
+  Hashtbl.iter (add_by_prefix nt.vars_tbl "var_" positive_of_int) ident_table;
+  Hashtbl.iter (add_by_prefix nt.funcs_tbl "ident_" positive_of_int) ident_table;
+  nt.methods_tbl <- methods_tbl;
+  nt
+
+let minicgen ast =
   match last_and_rest ast.aFileDeclarations with
   | Some ((_, ADlayer last), rest) ->
      let rest_compiled =
@@ -1114,9 +1149,9 @@ let minicgen filename ast =
 	     | i, ADlayer l -> Some (gen_layer false l))
 	    rest) in
      let last_compiled = gen_layer true last in
-     concat_genv rest_compiled last_compiled
+     gen_name_tables (), concat_genv rest_compiled last_compiled
   | _ -> coqgen_warning "Last declaration is not a layer, no code will be generated";
-	 Backend.Globalenvs.Genv.empty_genv
+	 Backend.NameTablesExt.empty_name_tables, Backend.Globalenvs.Genv.empty_genv
 
 let concat_constructor md1 md2 =
   let args, argtypes = (match md1.aMethodType.aMethodArgumentTypes, md2.aMethodType.aMethodArgumentTypes with

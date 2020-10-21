@@ -1,62 +1,59 @@
+open AST
 open Ascii
-open BinNums
 open BinPos
-open Coqlib
+open Cop
 open Ctypes
 open Datatypes
+open ExpMiniC
 open Globalenvs
-open Language1
-open Language
 open Maps0
 open Monad
+open Nat0
 open OptErrMonad
-open Specif
+open PeanoNat
+open StmtClocal
+open StmtMiniC
 open String0
 open Trees
 
-type __ = Obj.t
+val sequentialize : StmtClocal.statement list -> StmtClocal.statement
 
-type state = { st_nextnode : positive; st_code : code }
+val clocal_rvalue :
+  (nat -> expr) -> (expr -> nat -> (StmtClocal.statement, nat) prod optErr)
+  -> expr -> nat -> (StmtClocal.statement, nat) prod optErr
 
-val st_nextnode : state -> positive
+val clocal_lvalue :
+  (nat -> expr) -> (expr -> nat -> (StmtClocal.statement, nat) prod optErr)
+  -> expr -> nat -> (StmtClocal.statement, nat) prod optErr
 
-val st_code : state -> code
+val clocal_expr_list :
+  (nat -> expr) -> (expr list -> nat -> (StmtClocal.statement, nat) prod
+  optErr) -> expr list -> nat -> (StmtClocal.statement, nat) prod optErr
 
-val init_state : state
+val split_exps : nat -> expr list -> (expr list, expr list) prod optErr
 
-type 'a res =
-| Fail
-| OK of 'a * state
+val clocal_stm :
+  (nat -> expr) -> statement -> (StmtClocal.statement, nat) prod optErr
 
-type 'a mon = state -> 'a res
+val max_id : (ident, coq_type) prod list -> nat
 
-val coq_Monad_mon : __ mon coq_Monad
+val make_scrmap : nat -> nat -> expr
 
-val error : 'a1 mon
+val ptr_type : coq_type
 
-val add_instr : Language1.statement -> node mon
+val extend_locs :
+  nat -> nat -> (ident, coq_type) prod list -> (ident, coq_type) prod list
 
-val reserve_instr : node mon
+val clocal_function : coq_function -> StmtClocal.coq_function optErr
 
-val check_empty_node : state -> node -> sumbool
+val clocal_constructor :
+  coq_function option -> StmtClocal.coq_function option optErr
 
-val update_instr : node -> Language1.statement -> coq_unit mon
+val clocal_functions :
+  coq_function PTree.t -> StmtClocal.coq_function PTree.t optErr
 
-val cgraph_statement :
-  statement -> node -> node -> node -> node option -> node mon
-
-val cgraph_function : coq_function -> Language1.coq_function optErr
-
-val empty_constructor : coq_function
-
-val cgraph_constructor :
-  coq_function option -> Language1.coq_function option optErr
-
-val cgraph_functions :
-  coq_function PTree.t -> Language1.coq_function PTree.t optErr
-
-val cgraph_methoddefs :
-  coq_function option IntMap.t -> Language1.coq_function option IntMap.t
+val clocal_methoddefs :
+  coq_function option IntMap.t -> StmtClocal.coq_function option IntMap.t
   optErr
 
-val cgraph_genv : genv -> Language1.genv optErr
+val clocal_genv : genv -> StmtClocal.genv optErr

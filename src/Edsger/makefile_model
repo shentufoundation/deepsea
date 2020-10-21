@@ -1,0 +1,40 @@
+
+lastsources = $(lastfiles:.mli=.ml)
+libfiles = BinNums.mli BinPosDef.mli Datatypes.mli Specif.mli PeanoNat.mli Nat.mli BinPos.mli BinNat.mli BinInt.mli ZArith_dec.mli List0.mli Coqlib.mli
+libsources = $(libfiles:.mli=.ml)
+clikefiles = Zpower.mli Integers.mli AST.mli Cop.mli Options.mli Ctypes.mli Maps.mli Globalenvs.mli BuiltinSemantics.mli Language.mli Values.mli MachineModel.mli 
+clikesources = $(clikefiles:.mli=.ml)
+compilefiles = EVM.mli Compiled.mli IndexLib.mli Labels.mli TempModel.mli Language2.mli Language4.mli Language0.mli Language5.mli Language6.mli ExprCompile.mli MemoryModel.mli StmCompile.mli Trees.mli GlobalenvCompile.mli Language1.mli Semantics.mli Gen0.mli Gen.mli Gen4.mli Gen3.mli Language3.mli Gen2.mli Gen1.mli Semantics1.mli Gen6.mli Semantics0.mli Gen5.mli Glue.mli
+compilesources = $(compilefiles:.mli=.ml)
+
+main: extract
+
+ASM.mli: ../../../backend/ASM.mli
+	cp ../../../backend/ASM.mli ASM.mli
+
+ASM.ml: ../../../backend/ASM.ml
+	cp ../../../backend/ASM.ml ASM.ml
+
+libi:
+	ocamlopt $(libfiles)
+
+clikei: libi
+	ocamlopt $(clikefiles)
+
+compilei: clikei
+	ocamlopt $(compilefiles)
+
+lasti: compilei
+	ocamlopt $(lastfiles)
+
+alli: lasti ASM.mli
+	ocamlopt ASM.mli
+
+all: alli ASM.ml
+	ocamlopt $(libsources) $(clikesources) $(compilesources) $(lastsources) ASM.ml
+
+extract: alli ASM.ml Tester.ml
+	ocamlopt -o extract $(libsources) $(clikesources) $(compilesources) $(lastsources) ASM.ml Tester.ml
+
+clean:
+	rm -f *.mli *.ml *.cmi *.cmx *.o *.exe

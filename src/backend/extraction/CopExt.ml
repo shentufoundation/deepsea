@@ -4,6 +4,12 @@ let show_unop = function
   | Cop.Oneg     -> "neg"
   | Cop.Osha_1   -> "sha_1"
 
+let show_unop_symb = function
+  | Cop.Onotbool -> "!"
+  | Cop.Onotint  -> "~"
+  | Cop.Oneg     -> "-"
+  | Cop.Osha_1   -> "sha1 "
+
 let show_binop = function
   | Cop.Oadd -> "add"
   | Cop.Osub -> "sub"
@@ -22,4 +28,24 @@ let show_binop = function
   | Cop.Ogt  -> "gt"
   | Cop.Ole  -> "le"
   | Cop.Oge  -> "ge"
-  | Cop.Osha_2 -> "sha_2"                 
+  | Cop.Osha_2 -> "sha_2"
+
+let show_binop_symb = function
+  | Cop.Oadd -> "+"
+  | Cop.Osub -> "-"
+  | Cop.Omul -> "*"
+  | Cop.Odiv -> "/"
+  | Cop.Omod -> "%"
+  | Cop.Oexp -> "**"
+  | Cop.Oand -> "&&"
+  | Cop.Oor  -> "||"
+  | Cop.Oxor -> "^"
+  | Cop.Oshl -> "<<"
+  | Cop.Oshr -> ">>"
+  | Cop.Oeq  -> "=="
+  | Cop.One  -> "!="
+  | Cop.Olt  -> "<"
+  | Cop.Ogt  -> ">"
+  | Cop.Ole  -> "<="
+  | Cop.Oge  -> ">="
+  | Cop.Osha_2 -> "sha2"

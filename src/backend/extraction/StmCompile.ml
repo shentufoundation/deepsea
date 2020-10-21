@@ -7,14 +7,16 @@ open Datatypes
 open EVM
 open ExprCompile
 open Integers
-open Language5
+open List0
+open LowValues
 open Maps0
 open MemoryModel
+open Monad
 open Nat0
 open OptErrMonad
 open PeanoNat
+open StmtExpressionless
 open String0
-open Values
 
 (** val assign_stack_compiled : nat -> compiled **)
 
@@ -131,9 +133,23 @@ let rec push_event_args = function
         (Z.mul (Zpos (Coq_xO (Coq_xO (Coq_xO (Coq_xO (Coq_xO Coq_xH))))))
           (Z.of_nat n)))) (push_event_args n))
 
+(** val constructor_data_load : nat -> compiled **)
+
+let constructor_data_load index =
+  ret (Obj.magic coq_Monad_optErr)
+    (rev (Coq_cons ((Coq_evm_push
+      (Int256.repr (Zpos (Coq_xO (Coq_xO (Coq_xO (Coq_xO (Coq_xO Coq_xH)))))))),
+      (Coq_cons ((Coq_evm_totallength index), (Coq_cons ((Coq_evm_push
+      (Int256.repr (Zpos (Coq_xO (Coq_xO (Coq_xO (Coq_xO (Coq_xO (Coq_xO
+        (Coq_xO Coq_xH)))))))))), (Coq_cons (Coq_evm_codecopy, (Coq_cons
+      ((Coq_evm_push
+      (Int256.repr (Zpos (Coq_xO (Coq_xO (Coq_xO (Coq_xO (Coq_xO (Coq_xO
+        (Coq_xO Coq_xH)))))))))), (Coq_cons (Coq_evm_mload,
+      Coq_nil)))))))))))))
+
 (** val stm_compiled : statement -> coq_Z PTree.t -> label -> compiled **)
 
-let stm_compiled stm ge code_label =
+let stm_compiled stm _ code_label =
   match stm with
   | Spush s ->
     (match s with
@@ -141,51 +157,6 @@ let stm_compiled stm ge code_label =
        (match v with
         | Vunit -> command_compiled (Coq_evm_push Int256.zero)
         | Vint i -> command_compiled (Coq_evm_push i)
-        | Vptr i ->
-          (match i with
-           | Iident id -> global_address ge id
-           | Ihash (_, _) ->
-             error_compiled (String ((Ascii (Coq_false, Coq_false, Coq_false,
-               Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)), (String
-               ((Ascii (Coq_true, Coq_false, Coq_true, Coq_false, Coq_true,
-               Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
-               Coq_true, Coq_false, Coq_false, Coq_true, Coq_true, Coq_true,
-               Coq_false)), (String ((Ascii (Coq_false, Coq_false, Coq_false,
-               Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)), (String
-               ((Ascii (Coq_false, Coq_false, Coq_false, Coq_false,
-               Coq_false, Coq_true, Coq_false, Coq_false)), (String ((Ascii
-               (Coq_true, Coq_true, Coq_true, Coq_true, Coq_false, Coq_true,
-               Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_true,
-               Coq_true, Coq_false, Coq_false, Coq_true, Coq_true,
-               Coq_false)), (String ((Ascii (Coq_false, Coq_false, Coq_false,
-               Coq_false, Coq_false, Coq_true, Coq_false, Coq_false)),
-               (String ((Ascii (Coq_true, Coq_false, Coq_true, Coq_true,
-               Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-               (Coq_true, Coq_false, Coq_false, Coq_false, Coq_false,
-               Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
-               Coq_false, Coq_true, Coq_true, Coq_false, Coq_true, Coq_true,
-               Coq_false)), (String ((Ascii (Coq_false, Coq_true, Coq_true,
-               Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)), (String
-               ((Ascii (Coq_true, Coq_true, Coq_true, Coq_true, Coq_false,
-               Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
-               Coq_true, Coq_false, Coq_false, Coq_true, Coq_true, Coq_true,
-               Coq_false)), (String ((Ascii (Coq_true, Coq_false, Coq_true,
-               Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)), (String
-               ((Ascii (Coq_true, Coq_false, Coq_true, Coq_false, Coq_false,
-               Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
-               Coq_false, Coq_true, Coq_false, Coq_false, Coq_true, Coq_true,
-               Coq_false)), (String ((Ascii (Coq_false, Coq_false, Coq_false,
-               Coq_false, Coq_false, Coq_true, Coq_false, Coq_false)),
-               (String ((Ascii (Coq_false, Coq_true, Coq_true, Coq_false,
-               Coq_true, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-               (Coq_true, Coq_false, Coq_false, Coq_false, Coq_false,
-               Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
-               Coq_false, Coq_true, Coq_true, Coq_false, Coq_true, Coq_true,
-               Coq_false)), (String ((Ascii (Coq_true, Coq_false, Coq_true,
-               Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)), (String
-               ((Ascii (Coq_true, Coq_false, Coq_true, Coq_false, Coq_false,
-               Coq_true, Coq_true, Coq_false)),
-               EmptyString)))))))))))))))))))))))))))))))))))))))))))))))
         | _ ->
           error_compiled (String ((Ascii (Coq_false, Coq_false, Coq_false,
             Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)), (String
@@ -230,6 +201,7 @@ let stm_compiled stm ge code_label =
      | Coq_inr l -> command_compiled (Coq_evm_push_label l))
   | Sdup id -> dup_ident id
   | Ssload -> command_compiled Coq_evm_sload
+  | Smload -> command_compiled Coq_evm_mload
   | Sunop op -> unop_compiled op
   | Sbinop (op, sgn) -> binop_compiled op sgn
   | Scall0 b -> command_compiled (builtin0_compiled b)
@@ -237,11 +209,13 @@ let stm_compiled stm ge code_label =
   | Sskip -> empty_compiled
   | Spop -> command_compiled Coq_evm_pop
   | Ssstore -> command_compiled Coq_evm_sstore
+  | Smstore -> command_compiled Coq_evm_mstore
   | Sswap lv -> assign_stack_compiled (S lv)
   | Sdone rv -> cleanup rv code_label
   | Slabel l -> command_compiled (Coq_evm_label l)
   | Sjump -> command_compiled Coq_evm_jump
   | Sjumpi -> command_compiled Coq_evm_jumpi
+  | Shash -> command_compiled Coq_evm_sha3
   | Stransfer -> command_compiled Coq_evm_call
   | Scallmethod (sg, args, rvcount) ->
     append_compiled Coq_evm_call (push_public_args args O rvcount sg)
@@ -331,9 +305,7 @@ let stm_compiled stm ge code_label =
       (append_compiled (Coq_evm_push Int256.zero)
         (command_compiled (Coq_evm_push Int256.zero)))
   | Scalldataload -> command_compiled Coq_evm_calldataload
-  | Smload -> command_compiled Coq_evm_mload
-  | Scodecopy -> command_compiled Coq_evm_codecopy
-  | TotalLength -> command_compiled Coq_evm_totallength
+  | Sconstructordataload i -> constructor_data_load i
 
 (** val code_compiled : code -> coq_Z PTree.t -> label -> compiled **)
 

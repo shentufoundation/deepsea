@@ -1,0 +1,6 @@
+(library
+  (name backend)
+	(libraries core zarith)
+  (preprocess (action (run %{bin:cppo} -V OCAML:%{ocaml_version} %{input-file})))
+)
+

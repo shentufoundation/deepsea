@@ -1,153 +1,233 @@
 open Ascii
+open BinNums
+open BinPos
+open Coqlib
+open Ctypes
 open Datatypes
 open Globalenvs
-open Language3
-open Language1
-open Language2
 open Maps0
 open Monad
 open OptErrMonad
+open Specif
+open StmtCGraph
+open StmtCintptr
 open String0
 open Trees
 
-(** val cbasic_stm : bool option -> node -> Language1.statement -> bblock **)
+type __ = Obj.t
 
-let cbasic_stm ismethod nthis = function
-| Sskip n -> Coq_cons ((Sjump n), Coq_nil)
-| Language1.Sassign (lv, rv, n) ->
-  Coq_cons ((Sassign (lv, rv)), (Coq_cons ((Sjump n), Coq_nil)))
-| Language1.Sset (id, rv, n) ->
-  Coq_cons ((Sset (id, rv)), (Coq_cons ((Sjump n), Coq_nil)))
-| Language1.Scall (retval, lab, args, n) ->
-  Coq_cons ((Scall (retval, lab, args, nthis)), (Coq_cons ((Sjump n),
-    Coq_nil)))
-| Scond (cond, ntrue, nfalse) ->
-  Coq_cons ((Sjumpi (cond, ntrue)), (Coq_cons ((Sjump nfalse), Coq_nil)))
-| Language1.Sreturn (val0, n) ->
-  Coq_cons ((Sreturn val0), (Coq_cons ((Sjump n), Coq_nil)))
-| Language1.Sdone -> Coq_cons ((Sdone ismethod), Coq_nil)
-| Language1.Stransfer (a, v, nfail, n) ->
-  Coq_cons ((Stransfer (a, v, nfail)), (Coq_cons ((Sjump n), Coq_nil)))
-| Language1.Scallmethod (a, rvs, sig0, v, args, nfail, n) ->
-  Coq_cons ((Scallmethod (a, rvs, sig0, v, args, nfail)), (Coq_cons ((Sjump
-    n), Coq_nil)))
-| Language1.Slog (topics, args, n) ->
-  Coq_cons ((Slog (topics, args)), (Coq_cons ((Sjump n), Coq_nil)))
-| Language1.Srevert -> Coq_cons (Srevert, Coq_nil)
+type state = { st_nextnode : positive; st_code : code }
 
-(** val cbasic_code : bool option -> Language1.code -> Language3.code **)
+(** val st_nextnode : state -> positive **)
 
-let cbasic_code ismethod c =
-  PTree.map (cbasic_stm ismethod) c
+let st_nextnode x = x.st_nextnode
 
-(** val cbasic_function :
-    bool option -> Language1.coq_function -> Language3.coq_function **)
+(** val st_code : state -> code **)
 
-let cbasic_function ismethod f =
-  { Language3.fn_return = f.Language1.fn_return; Language3.fn_params =
-    f.Language1.fn_params; Language3.fn_temps = f.Language1.fn_temps;
-    Language3.fn_code = (cbasic_code ismethod f.Language1.fn_code);
-    Language3.fn_entrypoint = f.fn_entrypoint }
+let st_code x = x.st_code
 
-(** val cbasic_fundef :
-    bool option -> Language1.coq_function -> Language3.coq_function optErr **)
+(** val init_state : state **)
 
-let cbasic_fundef ismethod f =
-  ret (Obj.magic coq_Monad_optErr) (cbasic_function ismethod f)
+let init_state =
+  { st_nextnode = Coq_xH; st_code = PTree.empty }
 
-(** val cbasic_fundefs :
-    Language1.coq_function PTree.t -> Language3.coq_function PTree.t optErr **)
+type 'a res =
+| Fail
+| OK of 'a * state
 
-let cbasic_fundefs t0 =
-  transl_tree (cbasic_fundef (Some Coq_false)) t0
+type 'a mon = state -> 'a res
 
-(** val cbasic_methoddefs :
-    Language1.coq_function option IntMap.t -> Language3.coq_function option
-    IntMap.t optErr **)
+(** val coq_Monad_mon : __ mon coq_Monad **)
 
-let cbasic_methoddefs methods =
-  transl_map (cbasic_fundef (Some Coq_true)) methods
+let coq_Monad_mon =
+  { ret = (fun _ x s -> OK (x, s)); bind = (fun _ _ f g s ->
+    match f s with
+    | Fail -> Fail
+    | OK (a, s') -> g a s') }
 
-(** val cbasic_constructor :
-    Language1.coq_function option -> Language3.coq_function optErr **)
+(** val error : 'a1 mon **)
 
-let cbasic_constructor = function
-| Some c ->
-  bind (Obj.magic coq_Monad_optErr) (cbasic_fundef None c) (fun f ->
-    ret (Obj.magic coq_Monad_optErr) f)
+let error _ =
+  Fail
+
+(** val add_instr : StmtCGraph.statement -> node mon **)
+
+let add_instr i s =
+  let n = s.st_nextnode in
+  OK (n, { st_nextnode = (Pos.succ n); st_code = (PTree.set n i s.st_code) })
+
+(** val reserve_instr : node mon **)
+
+let reserve_instr s =
+  let n = s.st_nextnode in
+  OK (n, { st_nextnode = (Pos.succ n); st_code = s.st_code })
+
+(** val check_empty_node : state -> node -> sumbool **)
+
+let check_empty_node s n =
+  match PTree.get n s.st_code with
+  | Some _ -> Coq_right
+  | None -> Coq_left
+
+(** val update_instr : node -> StmtCGraph.statement -> coq_unit mon **)
+
+let update_instr n i s =
+  match plt n s.st_nextnode with
+  | Coq_left ->
+    (match check_empty_node s n with
+     | Coq_left ->
+       OK (Coq_tt, { st_nextnode = s.st_nextnode; st_code =
+         (PTree.set n i s.st_code) })
+     | Coq_right -> Fail)
+  | Coq_right -> Fail
+
+(** val cgraph_statement :
+    statement -> node -> node -> node -> node option -> node mon **)
+
+let rec cgraph_statement s nd nret nrev nbrk =
+  match s with
+  | Sskip -> ret (Obj.magic coq_Monad_mon) nd
+  | Ssassign (lv, rv) -> add_instr (StmtCGraph.Ssassign (lv, rv, nd))
+  | Smassign (lv, rv) -> add_instr (StmtCGraph.Smassign (lv, rv, nd))
+  | Sset (id, rv) -> add_instr (StmtCGraph.Sset (id, rv, nd))
+  | Scall (retval, lab, args) ->
+    add_instr (StmtCGraph.Scall (retval, lab, args, nd))
+  | Ssequence (s1, s2) ->
+    bind (Obj.magic coq_Monad_mon) (cgraph_statement s2 nd nret nrev nbrk)
+      (fun ns -> cgraph_statement s1 ns nret nrev nbrk)
+  | Sifthenelse (c, strue, sfalse) ->
+    bind (Obj.magic coq_Monad_mon)
+      (cgraph_statement sfalse nd nret nrev nbrk) (fun nfalse ->
+      bind (Obj.magic coq_Monad_mon)
+        (cgraph_statement strue nd nret nrev nbrk) (fun ntrue ->
+        add_instr (Scond (c, ntrue, nfalse))))
+  | Sloop sbody ->
+    bind (Obj.magic coq_Monad_mon) reserve_instr (fun n1 ->
+      bind (Obj.magic coq_Monad_mon)
+        (cgraph_statement sbody n1 nret nrev (Some nd)) (fun n2 ->
+        bind (Obj.magic coq_Monad_mon)
+          (Obj.magic update_instr n1 (StmtCGraph.Sskip n2)) (fun _ ->
+          ret (Obj.magic coq_Monad_mon) n1)))
+  | Sbreak ->
+    (match nbrk with
+     | Some nbrk0 -> ret (Obj.magic coq_Monad_mon) nbrk0
+     | None -> error)
+  | Sreturn retvar -> add_instr (StmtCGraph.Sreturn (retvar, nret))
+  | Shash (ex1, ex2, exo) -> add_instr (StmtCGraph.Shash (ex1, ex2, exo, nd))
+  | Stransfer (a, v) -> add_instr (StmtCGraph.Stransfer (a, v, nrev, nd))
+  | Scallmethod (a, rvs, sig0, v, args) ->
+    add_instr (StmtCGraph.Scallmethod (a, rvs, sig0, v, args, nrev, nd))
+  | Slog (topics, args) -> add_instr (StmtCGraph.Slog (topics, args, nd))
+  | Srevert -> ret (Obj.magic coq_Monad_mon) nrev
+
+(** val cgraph_function : coq_function -> StmtCGraph.coq_function optErr **)
+
+let cgraph_function f =
+  let cgraph_fun =
+    bind (Obj.magic coq_Monad_mon) (add_instr Sdone) (fun nret ->
+      bind (Obj.magic coq_Monad_mon) (add_instr StmtCGraph.Srevert)
+        (fun nrev -> cgraph_statement f.fn_body nret nret nrev None))
+  in
+  (match cgraph_fun init_state with
+   | Fail ->
+     Error (String ((Ascii (Coq_true, Coq_true, Coq_false, Coq_false,
+       Coq_false, Coq_false, Coq_true, Coq_false)), (String ((Ascii
+       (Coq_true, Coq_true, Coq_true, Coq_true, Coq_false, Coq_true,
+       Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_true, Coq_true,
+       Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
+       (Coq_false, Coq_true, Coq_true, Coq_false, Coq_true, Coq_true,
+       Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_false, Coq_true,
+       Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
+       (Coq_false, Coq_true, Coq_false, Coq_false, Coq_true, Coq_true,
+       Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_true, Coq_false,
+       Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)), (String ((Ascii
+       (Coq_true, Coq_false, Coq_false, Coq_true, Coq_false, Coq_true,
+       Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_true, Coq_true,
+       Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
+       (Coq_false, Coq_true, Coq_true, Coq_true, Coq_false, Coq_true,
+       Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
+       Coq_false, Coq_false, Coq_false, Coq_true, Coq_false, Coq_false)),
+       (String ((Ascii (Coq_false, Coq_false, Coq_true, Coq_false, Coq_true,
+       Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_true,
+       Coq_true, Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)),
+       (String ((Ascii (Coq_false, Coq_false, Coq_false, Coq_false,
+       Coq_false, Coq_true, Coq_false, Coq_false)), (String ((Ascii
+       (Coq_false, Coq_true, Coq_false, Coq_false, Coq_false, Coq_true,
+       Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
+       Coq_true, Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)),
+       (String ((Ascii (Coq_true, Coq_true, Coq_true, Coq_true, Coq_false,
+       Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_true,
+       Coq_false, Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)),
+       (String ((Ascii (Coq_true, Coq_true, Coq_false, Coq_true, Coq_false,
+       Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_true,
+       Coq_false, Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)),
+       (String ((Ascii (Coq_false, Coq_false, Coq_false, Coq_false,
+       Coq_false, Coq_true, Coq_false, Coq_false)), (String ((Ascii
+       (Coq_false, Coq_true, Coq_true, Coq_false, Coq_false, Coq_true,
+       Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_false,
+       Coq_false, Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)),
+       (String ((Ascii (Coq_true, Coq_false, Coq_false, Coq_true, Coq_false,
+       Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
+       Coq_false, Coq_true, Coq_true, Coq_false, Coq_true, Coq_true,
+       Coq_false)), (String ((Ascii (Coq_true, Coq_false, Coq_true,
+       Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
+       (Coq_false, Coq_false, Coq_true, Coq_false, Coq_false, Coq_true,
+       Coq_true, Coq_false)),
+       EmptyString))))))))))))))))))))))))))))))))))))))))))))))))))))))
+   | OK (nentry, s) ->
+     ret (Obj.magic coq_Monad_optErr) { StmtCGraph.fn_return = f.fn_return;
+       StmtCGraph.fn_params = f.fn_params; StmtCGraph.fn_temps = f.fn_temps;
+       StmtCGraph.fn_locals = f.fn_locals; fn_code = s.st_code;
+       fn_entrypoint = nentry })
+
+(** val empty_constructor : coq_function **)
+
+let empty_constructor =
+  { fn_return = Tvoid; fn_params = Coq_nil; fn_temps = Coq_nil; fn_locals =
+    Coq_nil; fn_body = Sskip }
+
+(** val cgraph_constructor :
+    coq_function option -> StmtCGraph.coq_function option optErr **)
+
+let cgraph_constructor = function
+| Some f0 ->
+  bind (Obj.magic coq_Monad_optErr) (Obj.magic cgraph_function f0) (fun cf ->
+    ret (Obj.magic coq_Monad_optErr) (Some cf))
 | None ->
-  Error (String ((Ascii (Coq_true, Coq_true, Coq_false, Coq_false, Coq_false,
-    Coq_false, Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_true,
-    Coq_false, Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)), (String
-    ((Ascii (Coq_true, Coq_false, Coq_false, Coq_false, Coq_false, Coq_true,
-    Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_true, Coq_false,
-    Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-    (Coq_true, Coq_false, Coq_false, Coq_true, Coq_false, Coq_true, Coq_true,
-    Coq_false)), (String ((Ascii (Coq_true, Coq_true, Coq_false, Coq_false,
-    Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
-    Coq_true, Coq_true, Coq_true, Coq_false, Coq_true, Coq_false,
-    Coq_false)), (String ((Ascii (Coq_true, Coq_true, Coq_true, Coq_false,
-    Coq_false, Coq_false, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
-    Coq_false, Coq_true, Coq_false, Coq_false, Coq_true, Coq_true,
-    Coq_false)), (String ((Ascii (Coq_false, Coq_true, Coq_true, Coq_true,
-    Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
-    Coq_true, Coq_true, Coq_true, Coq_false, Coq_true, Coq_false,
-    Coq_false)), (String ((Ascii (Coq_false, Coq_true, Coq_true, Coq_false,
-    Coq_true, Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
-    Coq_true, Coq_false, Coq_true, Coq_true, Coq_true, Coq_false,
-    Coq_false)), (String ((Ascii (Coq_false, Coq_false, Coq_false, Coq_false,
-    Coq_false, Coq_true, Coq_false, Coq_false)), (String ((Ascii (Coq_true,
-    Coq_true, Coq_false, Coq_false, Coq_false, Coq_true, Coq_true,
-    Coq_false)), (String ((Ascii (Coq_true, Coq_true, Coq_true, Coq_true,
-    Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
-    Coq_true, Coq_true, Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)),
-    (String ((Ascii (Coq_true, Coq_true, Coq_false, Coq_false, Coq_true,
-    Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
-    Coq_true, Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)), (String
-    ((Ascii (Coq_false, Coq_true, Coq_false, Coq_false, Coq_true, Coq_true,
-    Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_false, Coq_true,
-    Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-    (Coq_true, Coq_true, Coq_false, Coq_false, Coq_false, Coq_true, Coq_true,
-    Coq_false)), (String ((Ascii (Coq_false, Coq_false, Coq_true, Coq_false,
-    Coq_true, Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
-    Coq_true, Coq_true, Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)),
-    (String ((Ascii (Coq_false, Coq_true, Coq_false, Coq_false, Coq_true,
-    Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
-    Coq_false, Coq_false, Coq_false, Coq_true, Coq_false, Coq_false)),
-    (String ((Ascii (Coq_true, Coq_false, Coq_false, Coq_true, Coq_false,
-    Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_true,
-    Coq_false, Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)), (String
-    ((Ascii (Coq_false, Coq_false, Coq_false, Coq_false, Coq_false, Coq_true,
-    Coq_false, Coq_false)), (String ((Ascii (Coq_false, Coq_true, Coq_true,
-    Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-    (Coq_true, Coq_false, Coq_true, Coq_false, Coq_false, Coq_true, Coq_true,
-    Coq_false)), (String ((Ascii (Coq_true, Coq_false, Coq_true, Coq_false,
-    Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
-    Coq_false, Coq_true, Coq_false, Coq_false, Coq_true, Coq_true,
-    Coq_false)), (String ((Ascii (Coq_true, Coq_false, Coq_true, Coq_false,
-    Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
-    Coq_false, Coq_true, Coq_false, Coq_false, Coq_true, Coq_true,
-    Coq_false)),
-    EmptyString))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+  bind (Obj.magic coq_Monad_optErr)
+    (Obj.magic cgraph_function empty_constructor) (fun cf ->
+    ret (Obj.magic coq_Monad_optErr) (Some cf))
 
-(** val cbasic_genv : Language1.genv -> Language3.genv optErr **)
+(** val cgraph_functions :
+    coq_function PTree.t -> StmtCGraph.coq_function PTree.t optErr **)
 
-let cbasic_genv ge =
+let cgraph_functions defs =
+  transl_tree cgraph_function defs
+
+(** val cgraph_methoddefs :
+    coq_function option IntMap.t -> StmtCGraph.coq_function option IntMap.t
+    optErr **)
+
+let cgraph_methoddefs defs =
+  transl_map cgraph_function defs
+
+(** val cgraph_genv : genv -> StmtCGraph.genv optErr **)
+
+let cgraph_genv ge =
   let vars = ge.Genv.genv_vars in
-  let funcs = ge.Genv.genv_funcs in
-  let methods = ge.Genv.genv_methods in
-  let defs = ge.Genv.genv_defs in
+  let names = ge.Genv.genv_funcs in
   let fundefs = ge.Genv.genv_fundefs in
+  let sigs = ge.Genv.genv_methods in
+  let defs = ge.Genv.genv_defs in
   let methoddefs = ge.Genv.genv_methoddefs in
   let constructor = ge.Genv.genv_constructor in
-  bind (Obj.magic coq_Monad_optErr) (Obj.magic cbasic_fundefs fundefs)
+  bind (Obj.magic coq_Monad_optErr) (Obj.magic cgraph_functions fundefs)
     (fun fundefs0 ->
     bind (Obj.magic coq_Monad_optErr)
-      (Obj.magic cbasic_methoddefs methoddefs) (fun methoddefs0 ->
+      (Obj.magic cgraph_methoddefs methoddefs) (fun methoddefs0 ->
       bind (Obj.magic coq_Monad_optErr)
-        (Obj.magic cbasic_constructor constructor) (fun constructor0 ->
+        (Obj.magic cgraph_constructor constructor) (fun constructor0 ->
         ret (Obj.magic coq_Monad_optErr) { Genv.genv_vars = vars;
-          Genv.genv_funcs = funcs; Genv.genv_methods = methods;
-          Genv.genv_defs = defs; Genv.genv_fundefs = fundefs0;
-          Genv.genv_methoddefs = methoddefs0; Genv.genv_constructor = (Some
-          constructor0) })))
+          Genv.genv_funcs = names; Genv.genv_methods = sigs; Genv.genv_defs =
+          defs; Genv.genv_fundefs = fundefs0; Genv.genv_methoddefs =
+          methoddefs0; Genv.genv_constructor = constructor0 })))

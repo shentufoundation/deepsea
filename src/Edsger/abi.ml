@@ -1,3 +1,5 @@
+#include "config.h"
+
 (* Methods related to the Solidity ABI. Right now, the only thing here is the code to compute the method name hashes. 
 
 See https://solidity.readthedocs.io/en/v0.4.24/abi-spec.html for the spec. *)
@@ -14,7 +16,11 @@ let eth_string_of_builtin_type = function
   | Tint  -> "uint256"
   | Tuint -> "uint256"
   | Tbool -> "bool"
+#ifdef ANT
+  | Taddress -> "identity"
+#else
   | Taddress -> "address"
+#endif
   | Thashvalue -> "uint256"
   | Tunit -> "UNIT"  (* The capitalized types will not be ABI-compatible with Solidity. *)
   | Tglobalpointer -> "UNSUPPORTED"

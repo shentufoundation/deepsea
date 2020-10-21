@@ -142,8 +142,6 @@ module Genv =
 
   let all_functions ge =
     app (map snd (PTree.elements ge.genv_fundefs))
-      (app
-        (flat_map optional_filter
-          (map snd (PTree.elements (snd ge.genv_methoddefs))))
-        (optional_filter ge.genv_constructor))
+      (flat_map optional_filter
+        (map snd (PTree.elements (snd ge.genv_methoddefs))))
  end

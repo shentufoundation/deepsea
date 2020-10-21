@@ -185,6 +185,20 @@ module Pos =
   let compare =
     compare_cont Eq
 
+  (** val eqb : positive -> positive -> bool **)
+
+  let rec eqb p q =
+    match p with
+    | Coq_xI p0 -> (match q with
+                    | Coq_xI q0 -> eqb p0 q0
+                    | _ -> Coq_false)
+    | Coq_xO p0 -> (match q with
+                    | Coq_xO q0 -> eqb p0 q0
+                    | _ -> Coq_false)
+    | Coq_xH -> (match q with
+                 | Coq_xH -> Coq_true
+                 | _ -> Coq_false)
+
   (** val coq_Nsucc_double : coq_N -> coq_N **)
 
   let coq_Nsucc_double = function
@@ -299,6 +313,14 @@ module Pos =
 
   let to_nat x =
     iter_op Nat0.add x (S O)
+
+  (** val of_nat : nat -> positive **)
+
+  let rec of_nat = function
+  | O -> Coq_xH
+  | S x -> (match x with
+            | O -> Coq_xH
+            | S _ -> succ (of_nat x))
 
   (** val of_succ_nat : nat -> positive **)
 

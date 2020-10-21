@@ -1,33 +1,62 @@
 open Ascii
+open BinNums
+open BinPos
+open Coqlib
+open Ctypes
 open Datatypes
 open Globalenvs
-open Language3
-open Language1
-open Language2
 open Maps0
 open Monad
 open OptErrMonad
+open Specif
+open StmtCGraph
+open StmtCintptr
 open String0
 open Trees
 
-val cbasic_stm : bool option -> node -> Language1.statement -> bblock
+type __ = Obj.t
 
-val cbasic_code : bool option -> Language1.code -> Language3.code
+type state = { st_nextnode : positive; st_code : code }
 
-val cbasic_function :
-  bool option -> Language1.coq_function -> Language3.coq_function
+val st_nextnode : state -> positive
 
-val cbasic_fundef :
-  bool option -> Language1.coq_function -> Language3.coq_function optErr
+val st_code : state -> code
 
-val cbasic_fundefs :
-  Language1.coq_function PTree.t -> Language3.coq_function PTree.t optErr
+val init_state : state
 
-val cbasic_methoddefs :
-  Language1.coq_function option IntMap.t -> Language3.coq_function option
-  IntMap.t optErr
+type 'a res =
+| Fail
+| OK of 'a * state
 
-val cbasic_constructor :
-  Language1.coq_function option -> Language3.coq_function optErr
+type 'a mon = state -> 'a res
 
-val cbasic_genv : Language1.genv -> Language3.genv optErr
+val coq_Monad_mon : __ mon coq_Monad
+
+val error : 'a1 mon
+
+val add_instr : StmtCGraph.statement -> node mon
+
+val reserve_instr : node mon
+
+val check_empty_node : state -> node -> sumbool
+
+val update_instr : node -> StmtCGraph.statement -> coq_unit mon
+
+val cgraph_statement :
+  statement -> node -> node -> node -> node option -> node mon
+
+val cgraph_function : coq_function -> StmtCGraph.coq_function optErr
+
+val empty_constructor : coq_function
+
+val cgraph_constructor :
+  coq_function option -> StmtCGraph.coq_function option optErr
+
+val cgraph_functions :
+  coq_function PTree.t -> StmtCGraph.coq_function PTree.t optErr
+
+val cgraph_methoddefs :
+  coq_function option IntMap.t -> StmtCGraph.coq_function option IntMap.t
+  optErr
+
+val cgraph_genv : genv -> StmtCGraph.genv optErr

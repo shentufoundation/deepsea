@@ -7,8 +7,8 @@ open Ctypes
 open Datatypes
 open Globalenvs
 open Integers
-open Language6
-open Language7
+open Language
+open Language0
 open List0
 open Maps0
 open Monad
@@ -22,11 +22,11 @@ open Types
 val allocate_addrs :
   ident list -> coq_Z -> coq_type PTree.t -> coq_Z PTree.t optErr
 
-val allocations : Language6.genv -> coq_Z PTree.t optErr
+val allocations : Language.genv -> coq_Z PTree.t optErr
 
-val genv_compiled : Language6.genv -> compiled
+val genv_compiled : Language.genv -> compiled
 
-val get_main_entrypoint : Language6.genv -> label optErr
+val get_main_entrypoint : Language.genv -> label optErr
 
 val extract_funcargtype : (ident, coq_type) prod list -> valtype list
 

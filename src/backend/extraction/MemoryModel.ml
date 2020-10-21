@@ -66,14 +66,3 @@ let call_data_arg_location argi =
     (Z.add
       (Z.mul (Z.of_nat argi) (Zpos (Coq_xO (Coq_xO (Coq_xO (Coq_xO (Coq_xO
         Coq_xH))))))) (Zpos (Coq_xO (Coq_xO Coq_xH))))
-
-(** val bytes_to_fetch : Int256.int **)
-
-let bytes_to_fetch =
-  Int256.repr (Zpos (Coq_xO (Coq_xO (Coq_xO (Coq_xO (Coq_xO Coq_xH))))))
-
-(** val coq_MemoryLocation : Int256.int **)
-
-let coq_MemoryLocation =
-  Int256.repr (Zpos (Coq_xO (Coq_xO (Coq_xO (Coq_xO (Coq_xO (Coq_xO (Coq_xO
-    Coq_xH))))))))

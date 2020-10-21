@@ -1,3 +1,5 @@
+#include "config.h"
+
 %{
 open Astcommon
 open Parsetree
@@ -97,7 +99,11 @@ let cons_either_double_list e (l1, l2) = match e with
 %token TRUSTED
 %token TYPE
 %token EVENT
+#ifdef ANT
+%token IDENTITY
+#else
 %token ADDRESS
+#endif
 %token INDEXED
 %token EMIT
 
@@ -256,7 +262,11 @@ type_expression:
         in 
         mkfotyp ~loc:$sloc (x)  
        }
+#ifdef ANT
+  | IDENTITY { mkfotyp ~loc:$sloc (PTbuiltin Taddress) }
+#else
   | ADDRESS { mkfotyp ~loc:$sloc (PTbuiltin Taddress) }
+#endif
   | LPAREN type_expression RPAREN
       { $2 }
   | type_expression STAR type_expression
@@ -464,8 +474,8 @@ layer_type:
                -> LBRACE IDENT EQUAL expression SEMICOLON
                          IDENT EQUAL expression RBRACE
 
-     producing [PCsequence (PCyield (PEbin (OPeq, PEvar "x", e1)),
-                            PCyield (PEbin (OPeq, PEvar "y", e2)))], or
+     producing [PCsequence (PCyield (PEbin (OPeq, PEglob "x", e1)),
+                            PCyield (PEbin (OPeq, PEglob "y", e2)))], or
 
        command -> expression
                -> expression_atom_head
@@ -482,11 +492,16 @@ layer_type:
   */
 
 atom:
-    IDENT  { let x = try Hashtbl.find constant_table $1 with Not_found -> PEvar $1 in  mkexp_ ~loc:$sloc (x) }
+    IDENT  { let x = try Hashtbl.find constant_table $1 with Not_found -> PEglob $1 in  mkexp_ ~loc:$sloc (x) }
   | INT  {  mkexp_ ~loc:$sloc (PEconstant (CONint (int_of_string($1)))) }
   | UINT  {  mkexp_ ~loc:$sloc (PEconstant (CONuint (int_of_string($1)))) }
+#ifdef ANT
+  | IDENTITY LPAREN INT RPAREN {  mkexp_ ~loc:$sloc (PEconstant (CONaddress $3)) }
+  | IDENTITY LPAREN UINT RPAREN {  mkexp_ ~loc:$sloc (PEconstant (CONaddress $3)) }
+#else
   | ADDRESS LPAREN INT RPAREN {  mkexp_ ~loc:$sloc (PEconstant (CONaddress $3)) }
   | ADDRESS LPAREN UINT RPAREN {  mkexp_ ~loc:$sloc (PEconstant (CONaddress $3)) }
+#endif
   | LPAREN RPAREN  {  mkexp_ ~loc:$sloc (PEconstant CONunit) }
   | LPAREN comma_sep_expressions RPAREN  { $2 }
   | a=atom LBRACKET e=expression RBRACKET  {  mkexp_ ~loc:$sloc (PEindex (a, e)) }
@@ -503,7 +518,7 @@ expression:
           else (mkexp_ ~loc:$sloc (PEapp ($1, List.rev $2)))
           in
           mkexp_ ~loc:$sloc x.p_expression_desc
-          (* Constructors with zero parameter will be separated from PEvar
+          (* Constructors with zero parameter will be separated from PEglob
              in later stages.*) }
   | MINUS e=expression %prec prec_unary_prefix  {  mkexp_ ~loc:$sloc (PEun (OPneg, e)) }
   | BANG e=expression %prec prec_unary_prefix  {  mkexp_ ~loc:$sloc (PEun (OPnot, e)) }
@@ -800,8 +815,13 @@ annotation:
     EQUAL command  { PAexpr $2 }
   | INT  { PAexpr (mkcmd ~loc:$loc (PCyield (mkexp_ ~loc:$loc  (PEconstant (CONint (int_of_string($1))))))) }
   | UINT  { PAexpr (mkcmd ~loc:$loc (PCyield (mkexp_ ~loc:$loc  (PEconstant (CONuint (int_of_string($1))))))) }
+#ifdef ANT
+  | IDENTITY LPAREN INT RPAREN { PAexpr (mkcmd ~loc:$loc (PCyield (mkexp_ ~loc:$loc (PEconstant (CONaddress $3))))) }
+  | IDENTITY LPAREN UINT RPAREN { PAexpr (mkcmd ~loc:$loc (PCyield (mkexp_ ~loc:$loc (PEconstant (CONaddress $3))))) }
+#else
   | ADDRESS LPAREN INT RPAREN { PAexpr (mkcmd ~loc:$loc (PCyield (mkexp_ ~loc:$loc (PEconstant (CONaddress $3))))) }
   | ADDRESS LPAREN UINT RPAREN { PAexpr (mkcmd ~loc:$loc (PCyield (mkexp_ ~loc:$loc (PEconstant (CONaddress $3))))) }
+#endif
   | IDENT annotation_arguments  { PAclause ($1, $2) }
   | STRING annotation_arguments  { PAclause ($1, $2) }
 ;
@@ -809,8 +829,13 @@ annotation_arguments:
       { [] }
   | INT  { [PAexpr (mkcmd ~loc:$loc (PCyield (mkexp_ ~loc:$loc (PEconstant (CONint (int_of_string($1)))))))] }
   | UINT  { [PAexpr (mkcmd ~loc:$loc (PCyield (mkexp_ ~loc:$loc  (PEconstant (CONuint (int_of_string($1)))))))] }
+#ifdef ANT
+  | IDENTITY LPAREN INT RPAREN { [PAexpr (mkcmd ~loc:$loc (PCyield (mkexp_ ~loc:$loc (PEconstant (CONaddress $3)))))] }
+  | IDENTITY LPAREN UINT RPAREN { [PAexpr (mkcmd ~loc:$loc (PCyield (mkexp_ ~loc:$loc (PEconstant (CONaddress $3)))))] }
+#else
   | ADDRESS LPAREN INT RPAREN { [PAexpr (mkcmd ~loc:$loc (PCyield (mkexp_ ~loc:$loc (PEconstant (CONaddress $3)))))] }
   | ADDRESS LPAREN UINT RPAREN { [PAexpr (mkcmd ~loc:$loc (PCyield (mkexp_ ~loc:$loc (PEconstant (CONaddress $3)))))] }
+#endif
   | IDENT  { [PAclause ($1, [])] }
   | STRING  { [PAclause ($1, [])] }
   | LPAREN RPAREN  { [] }

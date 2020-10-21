@@ -1,57 +1,53 @@
 open AST
 open Ascii
 open BinNums
-open BinPos
-open Cop
-open Ctypes
 open Datatypes
-open GlobalenvCompile
+open ExpStacked
 open Globalenvs
-open Int0
 open Integers
-open Language
-open Language7
-open List0
+open LowValues
 open Maps0
+open MemoryModel
 open Monad
-open Nat0
 open OptErrMonad
-open Options
-open PeanoNat
+open Semantics2
+open StmtExpressionless
+open StmtStacked
 open String0
-open Structure
 open Trees
-open Values0
 
-val global_address : coq_Z PTree.t -> ident -> instr list optErr
+val expressionless_expr : expr -> StmtExpressionless.statement
 
-val wasm_expr :
-  nat PTree.t -> coq_Z PTree.t -> Language.expr -> bool -> instr list optErr
+val pops : nat -> StmtExpressionless.statement list
 
-val wasm_exprs :
-  nat PTree.t -> coq_Z PTree.t -> Language.expr list -> instr list optErr
+val cleanup : nat -> StmtExpressionless.statement list
 
-val wasm_statement :
-  nat PTree.t -> coq_Z PTree.t -> statement -> nat -> instrs optErr
+val expressionless_rt : ExpStacked.ret_type -> ret_type optErr
 
-val allocate_locals : (ident, coq_type) prod list -> nat -> nat PTree.t
+val fetch_args :
+  function_kind -> nat -> nat -> StmtExpressionless.statement list
 
-val allocate_all_locals : (ident, coq_type) prod list -> nat PTree.t
+val extract_lbl : typed_label -> label
 
-val allocate_fn_locals : Language.coq_function -> nat PTree.t
+val expressionless_stm :
+  statement -> function_kind -> StmtExpressionless.statement list optErr
 
-val wasm_function :
-  coq_Z PTree.t -> Language.coq_function -> coq_function optErr
+val expressionless_code :
+  code -> function_kind -> StmtExpressionless.code optErr
 
-val wasm_constructor :
-  Language.coq_function option -> coq_Z PTree.t -> coq_function option optErr
+val expressionless_function :
+  function_kind -> coq_function -> StmtExpressionless.coq_function optErr
 
-val wasm_functions :
-  Language.coq_function PTree.t -> coq_Z PTree.t -> coq_function PTree.t
-  optErr
+val expressionless_fundefs :
+  coq_function PTree.t -> StmtExpressionless.coq_function PTree.t optErr
 
-val wasm_methoddefs :
-  Language.coq_function option IntMap.t -> coq_Z PTree.t -> coq_function
-  option IntMap.t optErr
+val expressionless_methods :
+  coq_function option IntMap.t -> StmtExpressionless.coq_function option
+  IntMap.t optErr
 
-val wasm_genv : Language.genv -> genv optErr
+val expressionless_constructor :
+  coq_function option -> StmtExpressionless.coq_function optErr
+
+val expressionless_genv : genv -> StmtExpressionless.genv optErr
+
+val expressionless_program : program -> StmtExpressionless.program optErr

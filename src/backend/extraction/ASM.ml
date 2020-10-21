@@ -1,4 +1,5 @@
 open Integers
+(* open WasmPre *)
 
 module Links = Map.Make(struct type t = AST.label let compare = compare end)
 
@@ -61,7 +62,7 @@ type asm =
 | EVM_CALL
 | EVM_REVERT
 | EVM_RETURN
-| EVM_TOTAL_LENGTH
+| EVM_TOTAL_LENGTH of int
 
 type asm_program  = asm list
 type evm_program  = EVM.evm list
@@ -99,7 +100,7 @@ let map_labels program =
     | (x :: xs) ->
        match x with
        | EVM.Coq_evm_label l -> Links.add l counter (map_labels' xs (counter + 1))
-       | EVM.Coq_evm_totallength -> map_labels' xs (counter + 3)
+       | EVM.Coq_evm_totallength l -> map_labels' xs (counter + 3)
        | EVM.Coq_evm_push_label l -> map_labels' xs (counter + 5)
        | EVM.Coq_evm_push v -> map_labels' xs (counter + 1 + allocate v)
        | _ -> map_labels' xs (counter + 1)
@@ -198,7 +199,7 @@ let transform_inst links = function
   | EVM.Coq_evm_call               -> EVM_CALL
   | EVM.Coq_evm_revert             -> EVM_REVERT
   | EVM.Coq_evm_return             -> EVM_RETURN
-  | EVM.Coq_evm_totallength        -> (incr constructor_counter); EVM_TOTAL_LENGTH
+  | EVM.Coq_evm_totallength n      -> EVM_TOTAL_LENGTH (DatatypesExt.eval_nat n)
 
 (* asm -> bytecode *)
 let assemble_inst programsize = function
@@ -261,9 +262,8 @@ let assemble_inst programsize = function
   | EVM_CALL -> "f1"
   | EVM_REVERT -> "fd"
   | EVM_RETURN -> "f3"
-  | EVM_TOTAL_LENGTH -> let total_length =  hex(programsize + (constructor_counter.contents * 32)) in
-                         (decr constructor_counter);
-                        "61" ^ (pad 4 total_length)
+  | EVM_TOTAL_LENGTH n -> let total_length =  hex(programsize + ((n) * 32)) in
+                         "61" ^ (pad 4 total_length)
 
 let show_asm_inst = function
   | EVM_STOP -> "STOP"
@@ -325,7 +325,7 @@ let show_asm_inst = function
   | EVM_REVERT -> "REVERT"
   | EVM_RETURN -> "RETURN"
   | EVM_LOG n -> Printf.sprintf "LOG%d" n
-  | EVM_TOTAL_LENGTH -> "Total length" (* this is a dummy total length for futher calculation when push the constructor arguments *)
+  | EVM_TOTAL_LENGTH n ->  Printf.sprintf "TOTAL_LENGTH%d" n (* this is a dummy total length for futher calculation when push the constructor arguments *)
 
 let show_evm program =
   List.fold_left (fun acc x -> acc ^ "\n" ^ (EVMExt.show x)) "" program
@@ -351,17 +351,18 @@ let split program label =
     body = body_helper (EVM.Coq_evm_label label) program
   }
 
-let assemble program programsize =
-  let bytecode_list = List.map (assemble_inst programsize) program in
-  List.fold_left (fun acc x -> acc ^ x) "" bytecode_list
-
 let size_of_inst = function
   | EVM_PUSH (n, data) -> 1 + n
-  | EVM_TOTAL_LENGTH -> 3
+  | EVM_TOTAL_LENGTH n -> 3
   | _ -> 1
 
 let size_of_program asm =
   List.fold_left (fun acc x -> acc + (size_of_inst x)) 0 asm 
+
+let assemble program =
+  let programsize = size_of_program program in
+  let bytecode_list = List.map (assemble_inst programsize) program in
+  List.fold_left (fun acc x -> acc ^ x) "" bytecode_list
 
 let transform program entrypoint =
   let transform_intermediate program =
@@ -405,8 +406,21 @@ let matchtypes tx =
 (* address, data, value, result, path, topic1, topic2, topic3, topic4 *)
 (* corresponds to 0, 256, 256 * 2, 256 * 3, ... *)
 let wasm_frontend_data = 
-  String.concat "\n"
+  (* wasm_f131_data ^ "\n" ^ *)
+  (String.concat "\n"
   [
+    (*
+    (indent 1) ^ "(data (i32.const 1179648) \"0\")"; (* address *)
+    (indent 1) ^ "(data (i32.const 1179904) \"0\")"; (* data *)
+    (indent 1) ^ "(data (i32.const 1180160) \"0\")"; (* value *)
+    (indent 1) ^ "(data (i32.const 1180416) \"0\")"; (* result *)
+    (indent 1) ^ "(data (i32.const 1180672) \"0\")"; (* path *)
+    (indent 1) ^ "(data (i32.const 1180928) \"0\")"; (* topic1 *)
+    (indent 1) ^ "(data (i32.const 1181184) \"0\")"; (* topic2 *)
+    (indent 1) ^ "(data (i32.const 1181440) \"0\")"; (* topic3 *)
+    (indent 1) ^ "(data (i32.const 1181696) \"0\")"; (* topic4 *)
+    *)
+
     (indent 1) ^ "(data (i32.const 0) \"0\")"; (* address *)
     (indent 1) ^ "(data (i32.const 256) \"0\")"; (* data *)
     (indent 1) ^ "(data (i32.const 512) \"0\")"; (* value *)
@@ -416,8 +430,7 @@ let wasm_frontend_data =
     (indent 1) ^ "(data (i32.const 1536) \"0\")"; (* topic2 *)
     (indent 1) ^ "(data (i32.const 1792) \"0\")"; (* topic3 *)
     (indent 1) ^ "(data (i32.const 2048) \"0\")"; (* topic4 *)
-    (indent 1) ^ "(data (i32.const 2304) \"0\")"; (* scratch *)
-  ]
+  ])
 
 (* three globals reserved for scratch space *)
 let wasm_frontend_global =
@@ -426,7 +439,7 @@ let wasm_frontend_global =
   indent 1 ^ "(global (mut i32) (i32.const 0))"
 
 let wasm_frontend_mems = 
-  (indent 1) ^ "(memory 1)"
+  (indent 1) ^ "(memory (;0;) 20)"
 
 (* aux function definitions *)
 let wasm_frontend_aux_fucs : string =
@@ -488,18 +501,19 @@ let wasm_frontend_aux_fucs : string =
     )
     )
     (local.get $3))" ^ "\n" ^ 
-  (* sha1, $f129 *)
+  (* sha1, $f129, not used *)
   indent 1 ^ "(func $f129 (param $p0 i32) (param $p1 i32) (result i32) 
       local.get 0
     )" ^ "\n" ^
-  (* sha2, $f130 *)
+  (* sha2, $f130, not used *)
   indent 1 ^ "(func $f130 (param $p0 i32) (param $p1 i32) (result i32) 
       local.get 0
     )" ^ "\n" ^
-  (* sha3, $f131 *)
-  indent 1 ^ "(func $f131 (param $p0 i32) (param $p1 i32) (result i32) 
+  (* sha3, $f131, seperate definition *)
+  (* wasm_f131_func ^ "\n" ^ *)
+  (* indent 1 ^ "(func $f131 (param $p0 i32) (param $p1 i32) (result i32) 
       local.get 0
-    )" ^ "\n" ^
+    )" ^ "\n" ^ *)
   (* notint, $f132 *)
   indent 1 ^ "(func $f132 (param $p0 i32) (result i32)
     local.get $p0
@@ -560,7 +574,7 @@ let wasm_frontend_imports is_runtime =
   (indent 1) ^ "(import  \"ethereum\" \"useGas\"  (func $f25 (param i64) (result )))" ^ "\n" ^
   (indent 1) ^ "(import  \"ethereum\" \"getBlockTimestamp\"  (func $f27 (param ) (result i64)))" ^ "\n" ^
   (indent 1) ^ "(import  \"ethereum\" \"revert\"  (func $f28 (param i32 i32) (result )))" ^ "\n" ^
-  (indent 1) ^ "(import  \"ethereum\" \"returnDataSize\"  (func $f29 (param ) (result i32)))" ^ "\n" ^ (* special EEI for SOLL *)
+  (indent 1) ^ "(import  \"ethereum\" \"getReturnDataSize\"  (func $f29 (param ) (result i32)))" ^ "\n" ^ (* special EEI for SOLL *)
   (indent 1) ^ "(import  \"ethereum\" \"returnDataCopy\"  (func $f30 (param i32 i32 i32) (result )))" ^ "\n" ^
   (indent 1) ^ "(import  \"ethereum\" \"call\"  (func $f3 (param i64 i32 i32 i32 i32) (result i32)))" ^ "\n" ^
 
@@ -621,7 +635,7 @@ let rec wasm_frontend_expr (i: Structure.instr) (ind: int): string =
     indent ind ^  "i32.const " ^ string_of_int (DatatypesExt.eval_nat v)
   | Unop unop -> 
     (match unop with
-    | Values0.Coq_i32 cunop -> 
+    | Values.Coq_i32 cunop -> 
       (match cunop with 
       | Clz -> indent ind ^ "i32.clz"
       | Ctz -> indent ind ^ "i32.ctz"
@@ -629,7 +643,7 @@ let rec wasm_frontend_expr (i: Structure.instr) (ind: int): string =
     | _ -> print_endline "unexpected value other than i32"; exit 1)
   | Binop binop ->
     (match binop with
-    | Values0.Coq_i32 cbinop -> 
+    | Values.Coq_i32 cbinop -> 
       (match cbinop with 
       | Add -> indent ind ^ "i32.add"
       | Sub -> indent ind ^ "i32.sub"
@@ -646,11 +660,11 @@ let rec wasm_frontend_expr (i: Structure.instr) (ind: int): string =
     | _ -> print_endline "unexpected value other than i32"; exit 1)
   | Testop testop ->
     (match testop with
-    | Values0.Coq_i32 ctestop -> indent ind ^ "i32.eqz"
+    | Values.Coq_i32 ctestop -> indent ind ^ "i32.eqz"
     | _ -> print_endline "unexpected value other than i32"; exit 1)
   | Relop relop -> 
     (match relop with
-    | Values0.Coq_i32 crelop -> 
+    | Values.Coq_i32 crelop -> 
       (match crelop with 
       | Eq -> indent ind ^ "i32.eq"
       | Ne -> indent ind ^ "i32.ne"
@@ -661,14 +675,14 @@ let rec wasm_frontend_expr (i: Structure.instr) (ind: int): string =
     | _ -> print_endline "unexpected value other than i32"; exit 1)
   | Memop memop -> 
     (match memop with
-    | Values0.Coq_i32 cmemop -> 
+    | Values.Coq_i32 cmemop -> 
       (match cmemop with 
       | Store -> indent ind ^ "i32.store"
       | Load -> indent ind ^ "i32.load")
     | _ -> print_endline "unexpected value other than i32"; exit 1)
   | Cvtop cvtop -> 
     (match cvtop with
-    | Values0.Coq_i32 ccvtop -> 
+    | Values.Coq_i32 ccvtop -> 
       (match ccvtop with 
       | Wrap_i64 -> indent ind ^ "i32.wrap_i64"
       | Extend_i32 sx -> indent ind ^ "i64.extend_i32_u"
@@ -822,6 +836,10 @@ let wasm_frontend_multiplexer func_abi has_constructor tl is_runtime =
       (global.set 1)")
       (list_make ptn))) ^ "\n" ^
       indent 3 ^ "(call " ^ ("$f" ^ string_of_int (idx+256+funcoffset)) ^ ")\n" ^ 
+
+      (* display problem for burrow *)
+      (* indent 3 ^ "(call $chendian32)\n" ^ *)
+
       (* store the return value *)
       (if rtn = 0 then "" else 
       indent 3 ^ "global.set 1
@@ -912,11 +930,12 @@ let mnemonics_wasm (program: Structure.coq_module) (has_constructor: bool) (func
   "(module" ^ "\n" ^
   (String.concat "\n"
   [ 
-    wasm_frontend_types (DatatypesExt.caml_list program.coq_M_types);
+    (wasm_frontend_types (DatatypesExt.caml_list program.coq_M_types)) (*^ "\n" ^ wasm_f131_types*) ;
     wasm_frontend_imports is_runtime;
+    (* wasm_f131_table; *)
     wasm_frontend_mems;
-    wasm_frontend_data;
-    wasm_frontend_global;
+    (*wasm_f131_data ^ "\n" ^*) wasm_frontend_data;
+    (wasm_frontend_global) (*^ "\n" ^ wasm_f131_global*);
     wasm_frontend_exports;
     (* if is_debug then (wasm_frontend_exports_debug (DatatypesExt.caml_list program.coq_M_funcs)) else ""; *)
     wasm_frontend_funcs (DatatypesExt.caml_list program.coq_M_funcs) has_constructor func_abi (DatatypesExt.caml_list program.coq_M_types) is_runtime;

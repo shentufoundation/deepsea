@@ -122,10 +122,9 @@ type a_lexpr = {
 }
 
 and a_lexpr_desc =
-  | AEvar of ident
+  | AEglob of ident
   | AEfield of a_lexpr * ident
   | AEindex of a_lexpr * a_rexpr
-  | AEhash  of a_lexpr * a_rexpr
 			   
 
 (* "big" expressions are those that produce results that do not fit in a C 32-bit int. *)
@@ -538,10 +537,9 @@ let rec string_of_a_rexpr e = match e.aRexprDesc with
 
 
 let rec string_of_a_lexpr e = match e.aLexprDesc with
-  | AEvar i -> "var (" ^ i ^ ")"
+  | AEglob i -> "global (" ^ i ^ ")"
   | AEfield (e, i) -> string_of_a_lexpr e ^ ".{" ^ i ^ "}"
   | AEindex (e1, e2) -> string_of_a_lexpr e1 ^ "[" ^ string_of_a_rexpr e2 ^ "]"
-  | AEhash (e1, e2) -> string_of_a_lexpr e1 ^ "[" ^ string_of_a_rexpr e2 ^ "]"
 
 let rec string_of_a_big_expr e = match e.aBigExprDesc with
   | AErexpr e -> "B(" ^ string_of_a_rexpr e ^ ")"

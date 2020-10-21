@@ -1,34 +1,25 @@
-open AST
 open Ascii
-open BinInt
+open BinNums
 open Cop
 open Ctypes
 open Datatypes
+open ExpMiniC
 open Globalenvs
 open Integers
-open Language
 open Maps0
 open Monad
 open OptErrMonad
-open Options
+open StmtMiniC
 open String0
 open Trees
 
-val int_t : coq_type
-
-val struct_lvalue : expr -> coq_type -> ident -> expr optErr
-
-val array_lvalue : expr -> expr -> expr optErr
-
-val hash_lvalue : expr -> expr -> expr optErr
+val constofpos : positive -> expr
 
 val clike_rvalue : expr -> expr optErr
 
 val clike_lvalue : expr -> expr optErr
 
 val clike_rvalue_list : expr list -> expr list optErr
-
-val clike_optvalue : expr option -> expr option optErr
 
 val clike_stm : statement -> statement optErr
 

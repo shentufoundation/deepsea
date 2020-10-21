@@ -17,7 +17,7 @@ type p_expression =
     p_expression_loc: location;
   }
 and p_expression_desc =
-  | PEvar of ident
+  | PEglob of ident
   | PEconstant of constant
   | PEun of unop * p_expression
   | PEbin of binop * p_expression * p_expression
@@ -45,7 +45,7 @@ and p_command_desc =
   | PCsequence of p_command * p_command
   (* | PCcall of ident * ident * p_expression *)
   (* premitive calls now parsed as
-       PCyield (PEapp (PEfield (PEvar "slot", PEvar "method"),
+       PCyield (PEapp (PEfield (PEglob "slot", PEglob "method"),
                        [argument]))
   *)
   | PCcond of p_expression * p_command * p_command option
@@ -277,7 +277,7 @@ let string_of_location loc =
 let rec string_of_p_expression pexp =
   (string_of_p_expression_desc pexp.p_expression_desc) (* ^ (string_of_location pexp.p_expression_loc) *)
 and string_of_p_expression_desc = function
-  | PEvar i -> "var(" ^ i ^ ")"
+  | PEglob i -> "global(" ^ i ^ ")"
   | PEconstant c -> string_of_constant c
   | PEun (op, e) -> string_of_unop op ^ (string_of_p_expression e)
   | PEbin (op, e1, e2) ->

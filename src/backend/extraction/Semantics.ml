@@ -1,48 +1,42 @@
 open AST
+open Ctypes
 open Datatypes
 open Globalenvs
-open Labels
-open Language0
-open List0
 open Maps0
-open Specif
+open StmtClinear
 
-(** val label_code : code -> label list **)
+type bblock = statement list
 
-let rec label_code = function
-| Coq_nil -> Coq_nil
-| Coq_cons (s, rest) ->
-  let lr = label_code rest in
-  (match s with
-   | Slabel l -> Coq_cons (l, lr)
-   | _ -> lr)
+type code = bblock PTree.t
 
-(** val label_function : coq_function -> bool **)
+type coq_function = { fn_return : coq_type;
+                      fn_params : (ident, coq_type) prod list;
+                      fn_temps : (ident, coq_type) prod list;
+                      fn_locals : (ident, coq_type) prod list;
+                      fn_code : code; fn_entrypoint : label }
 
-let label_function f =
-  match label_norepet_dec (label_code (fn_code f)) with
-  | Coq_left -> Coq_true
-  | Coq_right -> Coq_false
+(** val fn_return : coq_function -> coq_type **)
 
-(** val xlabel_functions : coq_function option list -> bool **)
+let fn_return x = x.fn_return
 
-let rec xlabel_functions = function
-| Coq_nil -> Coq_true
-| Coq_cons (o, rest) ->
-  (match o with
-   | Some f ->
-     (match label_function f with
-      | Coq_true -> xlabel_functions rest
-      | Coq_false -> Coq_false)
-   | None -> xlabel_functions rest)
+(** val fn_params : coq_function -> (ident, coq_type) prod list **)
 
-(** val label_functions : coq_function PTree.t -> bool **)
+let fn_params x = x.fn_params
 
-let label_functions fns =
-  xlabel_functions (map (fun x -> Some x) (map snd (PTree.elements fns)))
+(** val fn_temps : coq_function -> (ident, coq_type) prod list **)
 
-(** val label_methods : coq_function option IntMap.t -> bool **)
+let fn_temps x = x.fn_temps
 
-let label_methods fns =
-  xlabel_functions (Coq_cons ((fst fns),
-    (map snd (PTree.elements (snd fns)))))
+(** val fn_locals : coq_function -> (ident, coq_type) prod list **)
+
+let fn_locals x = x.fn_locals
+
+(** val fn_code : coq_function -> code **)
+
+let fn_code x = x.fn_code
+
+(** val fn_entrypoint : coq_function -> label **)
+
+let fn_entrypoint x = x.fn_entrypoint
+
+type genv = (coq_function, coq_type) Genv.t

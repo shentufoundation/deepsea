@@ -1,76 +1,70 @@
 open AST
 open Ascii
-open BinNums
-open Cop
-open Ctypes
 open Datatypes
 open Globalenvs
 open Integers
-open Language2
-open Language
-open Language0
+open Labels
 open List0
 open Maps0
-open MemoryModel
 open Monad
-open Nat0
 open OptErrMonad
 open Options
-open Semantics
+open Semantics0
+open StmtClinear
 open String0
-open TempModel
 open Trees
 
-val stacked_expr :
-  nat PTree.t -> Language.expr -> nat -> bool -> statement list optErr
+val nodes_in_code : code -> label list
 
-val stacked_exprs :
-  nat PTree.t -> Language.expr list -> nat -> statement list optErr
+val allocate_labels : fd_label -> code -> label_map -> label_map
 
-val stacked_optexpr :
-  nat PTree.t -> Language.expr option -> statement list optErr
+val allocate_labels_fundef :
+  fd_label -> coq_function -> label_map -> label_map
 
-val ident_indices : nat PTree.t -> ident list -> nat -> nat list optErr
+val xallocate_labels_fun :
+  (label, coq_function) prod list -> label_map -> label_map
 
-val set_indices : nat list -> statement list
+val allocate_labels_fun : coq_function PTree.t -> label_map -> label_map
 
-val optident : nat PTree.t -> ident option -> statement optErr
+val allocate_labels_methods :
+  Int.int list -> coq_function option IntMap.t -> label_map -> label_map
 
-val return_type : Language2.coq_function -> coq_type
+val allocate_labels_constructor :
+  coq_function option -> label_map -> label_map
 
-val toreturn : Language2.coq_function -> bool option -> ret_type
+val allocate_labels_ge : genv -> label_map
 
-val zero_stm : statement
+val clabeled_stm : fd_label -> label_map -> statement -> statement optErr
 
-val xzero_stms : nat -> statement list
+val clabeled_code : fd_label -> label_map -> code -> code optErr
 
-val zero_stms : nat -> statement list
+val fn_is_method : fd_label -> bool
 
-val z_stm : coq_Z -> statement
+val clabeled_function_body : label -> fd_label -> code -> code
 
-val stacked_code :
-  nat PTree.t -> Language2.coq_function -> Language2.code -> code optErr
+val clabeled_function :
+  label_map -> fd_label -> coq_function -> coq_function optErr
 
-val allocate_locals : (ident, coq_type) prod list -> nat -> nat PTree.t
+val clabeled_fundef :
+  label_map -> fd_label -> coq_function -> coq_function optErr
 
-val allocate_all_locals : (ident, coq_type) prod list -> nat PTree.t
+val clabeled_fundef_f :
+  label_map -> label -> coq_function -> (label, coq_function) prod optErr
 
-val allocate_fn_locals : Language2.coq_function -> nat PTree.t
+val clabeled_fundefs :
+  label_map -> coq_function PTree.t -> coq_function PTree.t optErr
 
-val stacked_function : Language2.coq_function -> Language0.coq_function optErr
+val xclabeled_methods :
+  label_map -> Int.int list -> coq_function option IntMap.t -> coq_function
+  option IntMap.t optErr
 
-val stacked_fundef : Language2.coq_function -> Language0.coq_function optErr
+val clabeled_methods :
+  label_map -> Int.int list -> coq_function option IntMap.t -> coq_function
+  option IntMap.t optErr
 
-val stacked_fundefs :
-  Language2.coq_function PTree.t -> Language0.coq_function PTree.t optErr
+val clabeled_constructor :
+  label_map -> coq_function option -> coq_function optErr
 
-val stacked_methods :
-  Language2.coq_function option IntMap.t -> Language0.coq_function option
-  IntMap.t optErr
+val clabeled_genv : label_map -> genv -> genv optErr
 
-val stacked_constructor :
-  Language2.coq_function option -> Language0.coq_function optErr
-
-val stacked_genv : Language2.genv -> genv optErr
-
-val stacked_program : Language2.program -> program optErr
+val clabeled_program : genv -> program optErr

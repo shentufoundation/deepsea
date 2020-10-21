@@ -28,6 +28,15 @@ module Nat =
   let ltb n m =
     leb (S n) m
 
+  (** val max : nat -> nat -> nat **)
+
+  let rec max n m =
+    match n with
+    | O -> m
+    | S n' -> (match m with
+               | O -> n
+               | S m' -> S (max n' m'))
+
   (** val eq_dec : nat -> nat -> sumbool **)
 
   let rec eq_dec n m =

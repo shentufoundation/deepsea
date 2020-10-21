@@ -1,20 +1,22 @@
-open AST
-open BinNums
-open Integers
-open Specif
+open Datatypes
+open Float
+open Int0
+open Types
 
-type ident_ext =
-| Iident of ident
-| Ihash of ident_ext * Int256.int
+type byte = nat
 
-module IdentExtIndexed :
- sig
-  val eq : ident_ext -> ident_ext -> sumbool
- end
+type char = nat
 
-type coq_val =
-| Vunit
-| Vint of Int256.int
-| Vptr of ident_ext
-| Vhash of coq_val
-| Vhash2 of coq_val * coq_val
+type name = char list
+
+type ('i32, 'i64, 'f32, 'f64) op =
+| Coq_i32 of 'i32
+| Coq_i64 of 'i64
+| Coq_f32 of 'f32
+| Coq_f64 of 'f64
+
+type coq_val = (I32.t, I64.t, F32.t, F64.t) op
+
+val type_of : ('a1, 'a2, 'a3, 'a4) op -> valtype
+
+val value_of_val : coq_val -> nat option

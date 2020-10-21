@@ -1,58 +1,47 @@
-open AST
 open Ascii
+open BinNums
+open Cop
+open Ctypes
 open Datatypes
+open ExpCintptr
+open ExpMiniC
 open Globalenvs
-open Language5
-open Language0
 open Maps0
-open MemoryModel
 open Monad
 open OptErrMonad
-open Semantics0
+open StackEnv
+open StmtCintptr
+open StmtClocal
 open String0
 open Trees
-open Values
 
-val expressionless_expr : expr -> Language5.statement
+val spE : ExpCintptr.expr
 
-val pops : nat -> Language5.statement list
+val offsetE : coq_function -> ExpCintptr.expr
 
-val cleanup : nat -> Language5.statement list
+val pushS : coq_function -> StmtCintptr.statement
 
-val expressionless_rt : ret_type -> Language5.ret_type optErr
+val popS : coq_function -> StmtCintptr.statement
 
-val fetch_args : nat -> nat -> Language5.statement list
+val cintptr_expr : coq_function -> expr -> ExpCintptr.expr optErr
 
-val extract_lbl : typed_label -> label
+val cintptr_exprs : coq_function -> expr list -> ExpCintptr.expr list optErr
 
-val fetch_constructor_args : nat -> nat -> Language5.statement list
+val cintptr_expr_opt :
+  coq_function -> expr option -> ExpCintptr.expr option optErr
 
-val expressionless_stm : statement -> Language5.statement list optErr
+val cintptr_stmt : coq_function -> statement -> StmtCintptr.statement optErr
 
-val expressionless_stm_constructor :
-  statement -> Language5.statement list optErr
+val cintptr_function : coq_function -> StmtCintptr.coq_function optErr
 
-val expressionless_code : code -> Language5.code optErr
+val cintptr_fundefs :
+  coq_function PTree.t -> StmtCintptr.coq_function PTree.t optErr
 
-val expressionless_Constructor_code : code -> Language5.code optErr
-
-val expressionless_constructor_code : code -> Language5.code optErr
-
-val expressionless_function : coq_function -> Language5.coq_function optErr
-
-val expressionless_constructor_function :
-  coq_function -> Language5.coq_function optErr
-
-val expressionless_fundefs :
-  coq_function PTree.t -> Language5.coq_function PTree.t optErr
-
-val expressionless_methods :
-  coq_function option IntMap.t -> Language5.coq_function option IntMap.t
+val cintptr_methods :
+  coq_function option IntMap.t -> StmtCintptr.coq_function option IntMap.t
   optErr
 
-val expressionless_constructor :
-  coq_function option -> Language5.coq_function optErr
+val cintptr_constructor :
+  coq_function option -> StmtCintptr.coq_function optErr
 
-val expressionless_genv : genv -> Language5.genv optErr
-
-val expressionless_program : program -> Language5.program optErr
+val cintptr_genv : genv -> StmtCintptr.genv optErr

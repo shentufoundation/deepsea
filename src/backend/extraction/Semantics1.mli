@@ -1,14 +1,18 @@
 open AST
 open Datatypes
-open Integers
+open Globalenvs
 open Labels
-open Language5
-open Values
+open List0
+open Maps0
+open Specif
+open StmtStacked
 
-val sg_shift : nat
+val label_code : code -> label list
 
-val z0 : (coq_val, label) sum
+val label_function : coq_function -> bool
 
-val code_labels : code -> label list
+val xlabel_functions : coq_function option list -> bool
 
-val label_verify : code -> bool
+val label_functions : coq_function PTree.t -> bool
+
+val label_methods : coq_function option IntMap.t -> bool

@@ -7,4 +7,5 @@ In order to build it, use opam to install the prerequisites, and then run make:
 ```
 opam install .
 make edsger
+mv _build/default/Edsger/edsger.bc dsc
 ```

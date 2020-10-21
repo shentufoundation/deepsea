@@ -17,10 +17,15 @@ type intsize =
 | I256
 | IBool
 
+type ptrkind =
+| Coq_mem
+| Coq_stor
+| Coq_call
+
 type coq_type =
 | Tvoid
 | Tint of intsize * signedness
-| Tpointer of coq_type
+| Tpointer of ptrkind * coq_type
 | Tarray of coq_type * coq_Z
 | Thashmap of coq_type * coq_type
 | Tfunction of typelist * coq_type

@@ -115,10 +115,9 @@ type a_lexpr = {
 }
 
 and a_lexpr_desc =
-  | AEvar of ident
+  | AEglob of ident
   | AEfield of a_lexpr * ident
   | AEindex of a_lexpr * a_rexpr
-  | AEhash  of a_lexpr * a_rexpr
 
 type a_big_expr = {
   aBigExprDesc : a_big_expr_desc;

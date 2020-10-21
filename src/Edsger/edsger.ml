@@ -1,36 +1,51 @@
+#include "config.h"
+
 open Ast
+open Backend.BytecodeExt
 open Minicgen
 open Parser
 open Parsetree
 open Typecheck
+open Metadata
 
-let deepsea_version = "DeepSEA/EVM version 1.0.0"
-       
-type mode = ABI | BYTECODE | BYTECODE_RUNTIME | COMBINED_JSON | ASSEMBLY | MINIC | COQ | EWASM | EWASM_RUNTIME
+#ifdef ANT
+let deepsea_basename = "DeepSEA/AntChain-EVM"
+#else
+let deepsea_basename = "DeepSEA/EVM"
+#endif
+let deepsea_version_num = "1.1.0"
+
+let deepsea_version = deepsea_basename ^ " " ^ deepsea_version_num
+
+type mode = ABI | BYTECODE | BYTECODE_RUNTIME | COMBINED_JSON | ASSEMBLY | MINIC | MINIC_VERBOSE | COQ | EWASM | EWASM_RUNTIME | METADATA
 
 let string_of_token = function
-  | ARRAY -> "ARRAY"
-  | MAPPING -> "MAPPING"
-  | CONST -> "CONST"
-  | CONSTRUCTOR -> "CONSTRUCTOR"
-  | EOF -> "EOF"
-  | EXTERNAL -> "EXTERNAL"
-  | GHOST -> "GHOST"
-  | IDENT s -> "IDENT \"" ^ s ^ "\""
-  | INT i -> "INT \"" ^ i ^ "\""
-  | UINT i -> "UINT \"" ^ i ^ "\""
-  | LOGICAL -> "LOGICAL"
-  | LAYER -> "LAYER"
-  | OBJECT -> "OBJECT"
-  (* | OF -> "OF" *)
-  | SIGNATURE -> "SIGNATURE"
-  | STRING s -> "STRING(\"" ^ String.escaped s ^ "\")"
-  | TRUSTED -> "TRUSTED"
-  | TYPE -> "TYPE"
-  | EVENT -> "EVENT"
-  | ADDRESS -> "ADDRESS"
-  | INDEXED -> "INDEXED"
-  | EMIT -> "EMIT"
+  | ARRAY        -> "ARRAY"
+  | MAPPING      -> "MAPPING"
+  | CONST        -> "CONST"
+  | CONSTRUCTOR  -> "CONSTRUCTOR"
+  | EOF          -> "EOF"
+  | EXTERNAL     -> "EXTERNAL"
+  | GHOST        -> "GHOST"
+  | IDENT s      -> "IDENT \"" ^ s ^ "\""
+  | INT i        -> "INT \"" ^ i ^ "\""
+  | UINT i       -> "UINT \"" ^ i ^ "\""
+  | LOGICAL      -> "LOGICAL"
+  | LAYER        -> "LAYER"
+  | OBJECT       -> "OBJECT"
+  (* | OF        -> "OF" *)
+  | SIGNATURE    -> "SIGNATURE"
+  | STRING s     -> "STRING(\"" ^ String.escaped s ^ "\")"
+  | TRUSTED      -> "TRUSTED"
+  | TYPE         -> "TYPE"
+  | EVENT        -> "EVENT"
+#ifdef ANT
+  | IDENTITY      -> "IDENTITY"
+#else
+  | ADDRESS      -> "ADDRESS"
+#endif
+  | INDEXED      -> "INDEXED"
+  | EMIT         -> "EMIT"
   | ASSERT       -> "ASSERT"
   | BEGIN        -> "BEGIN"
   | DENY         -> "DENY"
@@ -46,7 +61,7 @@ let string_of_token = function
   | LET          -> "LET"
   | MATCH        -> "MATCH"
   | MOD          -> "MOD"
-  (* | SKIP         -> "SKIP" *)
+  (* | SKIP      -> "SKIP" *)
   | THEN         -> "THEN"
   | TO           -> "TO"
   | WITH         -> "WITH"
@@ -129,7 +144,7 @@ let print_ast_file_structure ast =
        print_endline ("AType " ^ i ^ " ::= " ^ string_of_a_type true t)
     | i, ADevent e ->
        print_endline ("AEvent " ^ i ^ " ::= [todo]")
-      
+
     (*
     | i, ADobject o ->
       print_endline (string_of_a_object o)
@@ -153,8 +168,8 @@ let print_ast_file_structure ast =
     ) ast.aFileExternalVerbatim
 
 
-let usage () = 
-  prerr_endline ( "usage: dsc program.ds (bytecode | bytecode-runtime | abi | combined-json | assembly | minic | coq | ewasm | ewasm-runtime )\n"
+let usage () =
+  prerr_endline ( "usage: dsc program.ds (bytecode(-runtime)? | abi | combined-json | assembly | minic(-verbose)? | coq | ewasm(-runtime)? | metadata)\n"
 		  ^"or     dsc --version\n");
   exit 1
 
@@ -171,40 +186,42 @@ let main argv =
   (if (Array.length argv <> 3) then usage());
   let filename = argv.(1) in
   let mode_flag = match Array.get argv 2 with
-    | "bytecode" -> BYTECODE
+    | "bytecode"         -> BYTECODE
     | "bytecode-runtime" -> BYTECODE_RUNTIME
-    | "abi"      -> ABI
-    | "combined-json" -> COMBINED_JSON
-    | "assembly" -> ASSEMBLY
-    | "minic"    -> MINIC
-    | "coq"      -> COQ
-    | "ewasm"     -> EWASM
-    | "ewasm-runtime" -> EWASM_RUNTIME
-    | _          -> usage () in  
+    | "abi"              -> ABI
+    | "combined-json"    -> COMBINED_JSON
+    | "assembly"         -> ASSEMBLY
+    | "minic"            -> MINIC
+    | "minic-verbose"    -> MINIC_VERBOSE
+    | "coq"              -> COQ
+    | "ewasm"            -> EWASM
+    | "ewasm-runtime"    -> EWASM_RUNTIME
+    | "metadata"         -> METADATA
+    | _                  -> usage () in
   (* print_endline ("reading from \"" ^ filename ^ "\""); *)
   let ch = open_in filename in
   let buf = Lexing.from_channel ch in
   (*let _ = Location.init buf filename in*)
   let parse_structure = try
-    file
+    Parser.file
       Lexer.token
       (*fun buf -> let t = Lexer.token buf
                   in print_endline ("TOK: " ^ string_of_token t); t*)
-      buf 
+      buf
      with Failure _
         | Parser.Error  ->
 	  let curr = buf.Lexing.lex_curr_p in
 	  let line = curr.Lexing.pos_lnum in
 	  let cnum = curr.Lexing.pos_cnum - curr.Lexing.pos_bol in
 	  let tok = Lexing.lexeme buf in
-	  print_endline (filename ^":"^ string_of_int line 
-			 ^":"^ string_of_int cnum 
+	  print_endline (filename ^":"^ string_of_int line
+			 ^":"^ string_of_int cnum
 			 ^": Syntax error at token \"" ^ tok ^ "\".");
 	  exit 1
    in
   (* let _ = print_parse_file_structure parse_structure in *)
   let has_error, ast_structure = typecheck parse_structure filename
-  in (* print_ast_file_structure ast_structure; *)
+  in
   if has_error then
     begin print_endline "typecheck failed"; exit 1 end
   else
@@ -212,52 +229,21 @@ let main argv =
     match mode_flag with
     (*  COQ -> Coqgen.coqgen filename ast_structure *)
     | COQ -> print_endline "Coq output is not supported in this preview release."; exit 1
-    | ABI -> print_endline abi 			   
-    | MINIC -> let ge = minicgen filename ast_structure in print_endline (Backend.LanguageExt.show_genv ge)	
-    | EWASM -> 		 
-        (let ge = minicgen filename ast_structure in
-        match Backend.Glue.full_compile_genv_wasm ge with
-        | Backend.OptErrMonad.Error msg ->
-          print_endline ("Internal error: compilation failed in WASM backend\n"
-                          ^ "with error message: "
-                          ^ Backend.DatatypesExt.caml_string msg);
-          exit 1
-        | Backend.OptErrMonad.Success md_n_hc -> match Backend.DatatypesExt.caml_prod md_n_hc with | (mnd, fabi) -> 
-          match Backend.DatatypesExt.caml_prod mnd with
-          | (md, hc) ->
-            print_endline (Backend.ASM.mnemonics_wasm md (Backend.DatatypesExt.caml_bool hc) (Backend.DatatypesExt.caml_list fabi) false))
-    | EWASM_RUNTIME -> 
-        (let ge = minicgen filename ast_structure in
-        match Backend.Glue.full_compile_genv_wasm ge with
-        | Backend.OptErrMonad.Error msg ->
-          print_endline ("Internal error: compilation failed in WASM backend\n"
-                          ^ "with error message: "
-                          ^ Backend.DatatypesExt.caml_string msg);
-          exit 1
-        | Backend.OptErrMonad.Success md_n_hc -> match Backend.DatatypesExt.caml_prod md_n_hc with | (mnd, fabi) -> 
-          match Backend.DatatypesExt.caml_prod mnd with
-          | (md, hc) ->
-            print_endline (Backend.ASM.mnemonics_wasm md (Backend.DatatypesExt.caml_bool hc) (Backend.DatatypesExt.caml_list fabi) true))
-    (* Not WebAssembly *)
-    | _     ->
-       let ge = minicgen filename ast_structure in
-       match Backend.Glue.full_compile_genv ge with
-       | Backend.OptErrMonad.Error msg ->
-          print_endline ("Internal error: compilation failed in EVM backend\n"
-                         ^ "with error message: "
-                         ^ Backend.DatatypesExt.caml_string msg);
-          exit 1
-       | Backend.OptErrMonad.Success (Backend.Datatypes.Coq_pair (program, entrypoint)) -> (* a module of WebAssembly *)
-          let (asm, asm_runtime) =
-            Backend.ASM.transform
-              (List.rev (Backend.DatatypesExt.caml_list program))
-              entrypoint in
-          let programsize = Backend.ASM.size_of_program asm in
-          match mode_flag with
-	   | BYTECODE -> print_endline (Backend.ASM.assemble asm programsize)
-	   | BYTECODE_RUNTIME -> print_endline (Backend.ASM.assemble asm_runtime programsize)
-	   | ASSEMBLY -> print_endline (Backend.ASM.mnemonics asm)
-	   | COMBINED_JSON -> print_endline (combined_json filename abi (Backend.ASM.assemble asm programsize))
-	   | _        -> (print_endline "unreachable"; exit 1)
+    | ABI -> print_endline abi
+    | METADATA -> print_endline (metadata deepsea_version_num argv.(0) filename abi)
+    | _ ->
+      let name_tables, ge = minicgen ast_structure in
+      match mode_flag with
+      | MINIC -> print_endline (Backend.LanguageExt.show_genv false name_tables ge)
+      | MINIC_VERBOSE -> let name_tables, ge = minicgen ast_structure in print_endline (Backend.LanguageExt.show_genv true name_tables ge)
+      | EWASM -> print_endline (ewasm false ge)
+      | EWASM_RUNTIME -> print_endline (ewasm true ge)
+      | BYTECODE -> print_endline (bytecode false ge)
+      | BYTECODE_RUNTIME -> print_endline (bytecode true ge)
+      | ASSEMBLY -> print_endline (assembly ge)
+      | COMBINED_JSON ->
+        let asm, _ , programsize = get_bytecode_params ge in
+        print_endline (combined_json filename abi (Backend.ASM.assemble asm))
+      | COQ | ABI | METADATA -> (print_endline "unreachable"; exit 1)
 
 let _ = main Sys.argv

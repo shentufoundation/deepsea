@@ -45,6 +45,8 @@ module Pos :
 
   val compare : positive -> positive -> comparison
 
+  val eqb : positive -> positive -> bool
+
   val coq_Nsucc_double : coq_N -> coq_N
 
   val coq_Ndouble : coq_N -> coq_N
@@ -62,6 +64,8 @@ module Pos :
   val iter_op : ('a1 -> 'a1 -> 'a1) -> positive -> 'a1 -> 'a1
 
   val to_nat : positive -> nat
+
+  val of_nat : nat -> positive
 
   val of_succ_nat : nat -> positive
 

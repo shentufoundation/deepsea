@@ -52,7 +52,7 @@ let show = function
   | EVM.Coq_evm_jump -> "JUMP"
   | EVM.Coq_evm_jumpi -> "JUMPI"
   | EVM.Coq_evm_label l -> Printf.sprintf "%-16s %s" "LABEL" (BinNumsExt.show_pos l)
-  | EVM.Coq_evm_push x -> Printf.sprintf "%-16s %s" "PUSH" (BinNumsExt.show_int x)
+  | EVM.Coq_evm_push x -> Printf.sprintf "%-16s %s" "PUSH" (BinNumsExt.show_coq_int x)
   | EVM.Coq_evm_push_label l -> Printf.sprintf "%-16s %s" "PUSH_LABEL" (BinNumsExt.show_pos l)
   | EVM.Coq_evm_dup n -> Printf.sprintf "DUP N%d" (DatatypesExt.eval_nat n)
   | EVM.Coq_evm_swap n -> Printf.sprintf "SWAP N%d" (DatatypesExt.eval_nat n)
@@ -60,4 +60,4 @@ let show = function
   | EVM.Coq_evm_revert -> "REVERT"
   | EVM.Coq_evm_return -> "RETURN"
   | EVM.Coq_evm_log n ->  Printf.sprintf "LOG N%d" (DatatypesExt.eval_nat n)
-  | EVM.Coq_evm_totallength -> "TOTAL LENGTH"
+  | EVM.Coq_evm_totallength n -> Printf.sprintf "TOTAL LENGTH%d" (DatatypesExt.eval_nat n)

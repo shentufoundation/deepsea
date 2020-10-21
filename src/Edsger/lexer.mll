@@ -1,4 +1,6 @@
 {
+#include "config.h"
+
 open Parser
 open Parsetree
 
@@ -19,7 +21,11 @@ let keyword_table =
     "trusted", TRUSTED;
     "type", TYPE;
     "event", EVENT;
+#ifdef ANT
+    "identity", IDENTITY;
+#else
     "address", ADDRESS;
+#endif
     "emit", EMIT;
     "indexed", INDEXED;
     "assert", ASSERT;

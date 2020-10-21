@@ -1,31 +1,18 @@
 open AST
-open BinNums
-open Cop
-open Coqlib
 open Datatypes
 open Globalenvs
-open Integers
 open Labels
-open Language5
 open List0
-open MachineModel
 open Maps0
-open PeanoNat
 open Specif
-open Values
+open StmtClinear
 
-val code_labels : code -> label list
+val label_code : code -> label list
 
-val function_labels : coq_function -> label list
+val label_function : coq_function -> bool
 
-val genv_list_labels : genv -> label list
+val xlabel_functions : coq_function option list -> bool
 
-val stm_eq_dec : statement -> statement -> sumbool
+val label_functions : coq_function PTree.t -> bool
 
-val function_starts_with_label : (label, coq_function) prod -> bool
-
-val all_true : bool list -> bool
-
-val functions_start_with_labels : (label, coq_function) prod list -> bool
-
-val label_verify : genv -> bool
+val label_methods : coq_function option IntMap.t -> bool
