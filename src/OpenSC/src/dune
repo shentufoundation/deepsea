@@ -1,0 +1,11 @@
+(executable
+  (name opensc)
+  (modes byte exe)
+  (libraries backend cryptokit yojson extlib str)
+) 
+
+(ocamllex scanner)
+
+(menhir
+(modules parser)
+)
