@@ -1,0 +1,103 @@
+address:
+  calls:
+  - args: []
+    expectSuccess: true
+    name: init
+  - args: []
+    expectValue: 0x000000000000000000000000000000000000efca
+    name: get
+  - args: ["0xd115bffabbdd893a6f7cea402e7338643ced44a6"]
+    expectSuccess: true
+    name: set
+  - args: []
+    expectValue: 0xd115bffabbdd893a6f7cea402e7338643ced44a6
+    name: get
+asserts:
+  calls:
+  - args: []
+    expectSuccess: true
+    name: f
+  - args: []
+    expectSuccess: false
+    name: g
+  - args: []
+    expectSuccess: false
+    name: h
+  - args: []
+    expectSuccess: true
+    name: i
+  - args: []
+    expectSuccess: false
+    name: j
+constructor:
+  calls:
+  - args: []
+    expectSuccess: true
+    name: get
+  constructorArgs: [100, 321]
+constructor2:
+  calls:
+  - args: []
+    expectSuccess: true
+    name: test_upper
+  - args: []
+    expectValue: 9
+    name: get_w
+  constructorArgs: [6, 7, 8, 9]
+forloop:
+  calls:
+  - args:
+    - 3
+    - 5
+    expectSuccess: true
+    name: multiply
+  - args:
+    - 100
+    - 5
+    expectSuccess: true
+    name: multiply
+layers1:
+  calls:
+  - args: []
+    expectSuccess: true
+    name: f
+  constructorArgs: []
+match-int:
+  calls:
+  - args: []
+    expectSuccess: true
+    name: f
+struct:
+  calls:
+  - args:
+    - 0
+    - 0
+    expectSuccess: true
+    name: initialize
+  - args: []
+    expectSuccess: false
+    name: hasOwner
+  - args:
+    - 5
+    expectSuccess: false
+    name: hasSupply
+  - args:
+    - 5
+    - 17
+    expectSuccess: true
+    name: initialize
+  - args:
+    - 4
+    expectSuccess: true
+    name: hasSupply
+  - args:
+    - 5
+    expectSuccess: true
+    name: hasSupply
+  - args:
+    - 6
+    expectSuccess: false
+    name: hasSupply
+  - args: []
+    expectSuccess: true
+    name: hasOwner

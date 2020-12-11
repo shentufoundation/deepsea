@@ -1,4 +1,7 @@
 event
+  | E0
+
+event
   | E1 (v : uint)
 
 event
@@ -18,6 +21,7 @@ object signature OS = {
 
 object O : OS {    
   let f () =
+    emit E0();
     emit E1(0u42);
     emit E2(0u1, false);
     emit IE1(0u13);
