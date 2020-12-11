@@ -1488,6 +1488,10 @@ let rec output_rexpr out ind e = match e.aRexprDesc with
      output_string out "(@ECbuiltin0 _ _  _ builtin0_timestamp_impl)"
   | AEbuiltin ("number",[]) ->
      output_string out "(@ECbuiltin0 _ _  _ builtin0_number_impl)"
+  | AEbuiltin ("chainid",[]) ->
+     output_string out "(@ECbuiltin0 _ _  _ builtin0_chainid_impl)"
+  | AEbuiltin ("selfbalance",[]) ->
+     output_string out "(@ECbuiltin0 _ _  _ builtin0_selfbalance_impl)"
   | AEbuiltin ("balance",[e1]) ->
      output_string out "(@ECbuiltin1 _ _ _ _ _ builtin1_balance_impl \n";
      output_rexpr out ("  " ^ ind) e1;
@@ -1550,8 +1554,26 @@ let output_rexpr_gallina out se =
       output_char out ' ';
       output ("  " ^ ind) e2;
       output_char out ')'
-    | AEbuiltin _ -> coqgen_fatal_error __LOC__ "output_rexpr_gallina"
-                 "internal error: cannot generate gallina for AEbuiltin"
+    | AEbuiltin ("address",[]) ->
+        output_string out "(me_address me)"
+    | AEbuiltin ("origin",[]) ->
+        output_string out "(me_origin me)"
+    | AEbuiltin ("caller",[]) ->
+        output_string out "(me_caller me)"
+    | AEbuiltin ("callvalue",[]) ->
+        output_string out "(me_callvalue me)"
+    | AEbuiltin ("coinbase",[]) ->
+        output_string out "(me_coinbase me)"
+    | AEbuiltin ("timestamp",[]) ->
+        output_string out "(me_timestamp me)"
+    | AEbuiltin ("number",[]) ->
+        output_string out "(me_number me)"
+    | AEbuiltin ("balance",[e1]) ->
+        output_string out "(me_balance me)"
+    | AEbuiltin ("blockhash",[e1]) ->
+        output_string out "(me_blockhash me)"
+    | AEbuiltin (other,args) -> coqgen_fatal_error __LOC__ "output_rexpr_gallina"
+                  ("Internal error, encountered unknown builtin \""^other^"\".")
       
   in output
 
@@ -1681,10 +1703,13 @@ let rec output_tmp_env out ind depth = function
       type_pair_to_hyper_pair_name t.aTypePairIdent ^ " ");
     output_tmp_env out ind (depth + 1) res
 
+exception PrimitiveNotFound of string
+
 (* When calling a primitive from a lower layer, we need to look up
      which object it is defined in. *)
 let ident_of_primitive underlay slotname funcname =
-     let o = List.assoc slotname underlay.aLayerAllObjects in
+     let o = try (List.assoc slotname underlay.aLayerAllObjects)
+             with Not_found -> raise (PrimitiveNotFound slotname) in
      (o.aObjectName ^"_"^ funcname ^"_prim")
 
 let output_command env out base_layer obj method_full_name =
@@ -1889,10 +1914,54 @@ let output_command env out base_layer obj method_full_name =
       output ("  " ^ ind) pure (2::path) c2;
       output_char out ')'
     | ACcall (s, f, es) ->
-      output_string out ("(CCcall " ^ ident_of_primitive base_layer s f ^ "\n" ^ ind);
-      output_args ("  " ^ ind) es;
-      output_char out ')'
+      let o = (try (List.assoc s base_layer.aLayerAllObjects)
+      with Not_found -> raise (PrimitiveNotFound s); Typecheck.dummy_object s) in
+      (match o.aObjectAddress with
+      (* also need to print the addresses in DatatypeOps for easier proof *)
+      | Some addr -> 
+        (* this should be CCrespec *)
 
+        (* (CCrespec_opt (@AList.empty hyper_type_pair) (CCpanic tint_Z32)
+        (fun me se =>
+        (FixedSupplyToken_balanceOf_opt (me_address me) (ext_call_me me (Int256.repr 65587))))). *)
+        
+        output_string out ("(CCrespec_opt\n" ^ ind);
+        output_tmp_env out ind 0 c.aCmdEnv;
+        output_string out ("\n" ^ ind);
+        (try 
+        output_string out ("(CCpanic " ^ (List.find (fun m -> m.aMethodName = f) o.aObjectMethods).aMethodType.aMethodReturnType.aTypePairIdent ^ ")")
+        with Not_found -> ());
+        output_string out ("\n" ^ ind);
+        output_string out ("(fun me se => (");
+        (* output_string out "(@bind _ (@Monad_DS GlobalLayerSpec) _ _ get (fun d => put (execStateT ("; *)
+        let o = try (List.assoc s base_layer.aLayerAllObjects)
+                with Not_found -> raise (PrimitiveNotFound s) in
+        output_string out (o.aObjectName ^"_"^ f ^"_opt ");
+        
+        let rec output_args_gallina args = match args with
+          | [] -> output_string out " "
+          | x :: xs -> 
+            match x.aRexprDesc with
+            | AEconst CONunit -> output_string out " "
+            | _ -> 
+              output_string out "(";
+              (match x.aRexprDesc with 
+              | AEconst (CONuint n) -> output_string out "Int256.repr "
+              | AEconst (CONaddress addr) -> output_string out "Int256.repr "
+              | _ -> output_string out "");
+              output_rexpr_gallina out "se" ("    " ^ ind) x;
+              output_string out ") ";
+              output_args_gallina xs
+        in
+        output_args_gallina es;
+
+        output_string out "(ext_call_me me ";
+        output_string out ("(Int256.repr " ^  (Backend.BinNumsExt.numstring2decimalstring addr) ^ ")");
+        output_string out "))))"
+      | None -> 
+        output_string out ("(CCcall " ^ ident_of_primitive base_layer s f ^ "\n" ^ ind);
+        output_args ("  " ^ ind) es;
+        output_char out ')')
     | ACcond (e, c_then, c_else) ->
       output_string out "(CCifthenelse ";
       output_rexpr out ("  " ^ ind) e;
@@ -2120,9 +2189,14 @@ let output_command env out base_layer obj method_full_name =
 
 (* It would be a good idea to make the "ignore base" user-configurable, right now it's just an ad-hoc mess of things that comes up in different examples.. .*)       
        
-let cbv_ignore_base = "Int256.modulus zeq zle zlt Z.iter Z.le Z.lt Z.gt Z.ge Z.eqb Z.leb Z.ltb Z.geb Z.gtb Z.mul Z.div Z.modulo Z.add Z.sub Z.shiftl Z.shiftr Z.lxor Z.land Z.lor Int256.add Int256.sub Int256.mul Int256.modu Int256.divu Int256.cmpu Int256.not Int256.and Int256.or Int256.xor Int256.shl Int256.shru Ziteri Z.of_nat List.length HyperType.Hquery0"
-
-
+let cbv_ignore_base = "Int256.modulus zeq zle zlt Z.iter Z.le Z.lt Z.gt Z.ge Z.eqb Z.leb Z.ltb Z.geb Z.gtb Z.mul Z.div Z.modulo Z.add Z.sub Z.shiftl Z.shiftr Z.lxor Z.land Z.lor Z.of_nat
+Int256.repr Int256.zero Int256.add Int256.sub Int256.mul Int256.modu Int256.divu Int256.not Int256.and Int256.or Int256.xor Int256.shl Int256.shru Int256.eq Int256.lt Int256.ltu Ziteri 
+List.length is_true bool_dec
+negb andb orb
+hashvalue_eqb me_address me_origin me_caller me_callvalue me_coinbase me_timestamp me_number me_balance me_blockhash me_transfer me_callmethod
+DS Monad_DS MonadState_DS MonadZero_DS ret bind mzero get put gets guard modify runStateT OptionMonad.Monad_option
+GlobalLayerSpec GetHighData  ZMap.get ZMap.set Int256Tree.t Int256Tree.get Int256Tree.set Int256Tree.empty  Int256Tree.get_default \n"
+                    
 (* This "slices out" a piece of the AST, and defines it as a separate top-level definition
    (together with the corresponding environment type, wellformedness proof, etc).
 
@@ -2398,13 +2472,19 @@ let method_classify mt =
   (* has return *) mt.aMethodReturnType.aTypeDesc <> ATbuiltin Tunit
 
 let gen_object_definition env out base_layer_name i o =
+  let unmingledFieldName f = 
+    (* base_layer_name.aLayerName ^ "_" ^  *)
+    o.aObjectName ^ "_" ^ f.aObjectFieldName in
+  let unmingledMethodName m = 
+    (* base_layer_name.aLayerName ^ "_" ^  *)
+    o.aObjectName ^ "_" ^ m.aMethodName in 
   let _ = (* Outside of section: identifiers for methods and variables *)
     List.iteri (fun n m ->
       output_global_ident env ("ident_" ^ i ^ "_" ^ m.aMethodName) 
     ) o.aObjectMethods;
     List.iteri (fun n f ->
       if not f.aObjectFieldIsLogical then
-        output_global_ident env ("var_" ^ i ^ "_" ^ f.aObjectFieldName ^ "_ident")
+        output_global_ident env ("var_" ^ i ^ "_" ^ unmingledFieldName f ^ "_ident")
     ) o.aObjectFields in
 
   let _ = (* Start of section: context *)
@@ -2423,11 +2503,11 @@ Section OBJECT_" ^ i ^ "_DEFINITION.
       if f.aObjectFieldIsLogical then
         string_of_ident 99
       else
-        "var_" ^ o.aObjectName ^ "_" ^ f.aObjectFieldName ^ "_ident") ^ ";
+        "var_" ^ o.aObjectName ^ "_" ^ unmingledFieldName f ^ "_ident") ^ ";
     ltype_ghost := " ^ string_of_bool f.aObjectFieldIsLogical ^ ";
 
-    ltype_get := " ^ f.aObjectFieldName ^ ";
-    ltype_set := update_" ^ f.aObjectFieldName ^ ";
+    ltype_get := " ^ unmingledFieldName f ^ ";
+    ltype_set := update_" ^ unmingledFieldName f ^ ";
 
     ltype_set_ocond := otrue1;
     ltype_get_extra_ocond := otrue1
@@ -2437,7 +2517,7 @@ Section OBJECT_" ^ i ^ "_DEFINITION.
 #ifdef REDACTED
         ""
 #else
-        ("(*TODO: variables.*) (*  Definition " ^ i ^ "_" ^ f.aObjectFieldName ^ "_globvar : AST.globvar type :=
+        ("(*TODO: variables.*) (*  Definition " ^ i ^ "_" ^ unmingledFieldName f ^ "_globvar : AST.globvar type :=
     let ty := unpair_ty " ^ f.aObjectFieldType.aTypePairIdent ^ " in
     {| AST.gvar_info := ty;
        AST.gvar_init := AST.Init_space (sizeof ty) :: nil; (* XXX: until we can translate [Cval] to [AST.init_data] *)
@@ -2447,7 +2527,7 @@ Section OBJECT_" ^ i ^ "_DEFINITION.
 #endif
     ) o.aObjectFields in
   add_folded_symbols env @@ List.map (fun f ->
-    f.aObjectFieldName ^ " update_" ^ f.aObjectFieldName
+  unmingledFieldName f ^ " update_" ^ unmingledFieldName f
   ) o.aObjectFields;
 
   let _ = (* Methods *)
@@ -2490,10 +2570,8 @@ Section OBJECT_" ^ i ^ "_DEFINITION.
   Definition " ^ method_full_name ^ "_opt :") ;
   output_method_type_expr out mt;			 
   output_string out ("  := 
-  Eval cbv -[" ^ cbv_ignore_base ^ "
-             ret bind mzero get put gets guard modify
-             GetHighData is_true bool_dec ZMap.get ZMap.set Int256Tree.get Int256Tree.set Int256Tree.empty Int256Tree.t
-             " ^ env.folded_external_symbol_string ^ "
+  Eval cbv -[" ^ cbv_ignore_base              
+              ^ env.folded_external_symbol_string ^ "
              " ^ !(env.folded_symbols) ^ "]
   in synth_func_spec_opt " ^ method_full_name ^ " " ^ method_full_name ^ "_wf.
   Definition " ^ method_full_name ^ "_spec_hlist_opt args :=
@@ -2519,13 +2597,9 @@ Section OBJECT_" ^ i ^ "_DEFINITION.
       (synth_func_spec_opt " ^ method_full_name ^ " " ^ method_full_name ^ "_wf)
       args.
   Proof.\n" ^
-#ifndef REDACTED
-"    (*cbv -[" ^ cbv_ignore_base ^ "
-             ret bind mzero get put gets guard modify
-             GetHighData is_true bool_dec ZMap.get ZMap.set Int256Tree.get Int256Tree.set Int256Tree.empty Int256Tree.t
-             " ^ env.folded_external_symbol_string ^ "
-             " ^ !(env.folded_symbols) ^ "]. *)\n" ^
-#endif
+"    cbv -[" ^ cbv_ignore_base 
+             ^ env.folded_external_symbol_string ^ "
+             " ^ !(env.folded_symbols) ^ "]. \n" ^
 "     reflexivity.
   Qed.\n");
       (* Declare [*_spec] for concrete layer definition *)
@@ -2534,10 +2608,8 @@ Section OBJECT_" ^ i ^ "_DEFINITION.
   Eval cbv in synth_func_func " ^ method_full_name ^ ".
 
   Definition " ^ method_full_name ^ "_cond "^ args ^ " me d  :=
-  Eval cbv -[" ^ cbv_ignore_base ^ "
-             ret bind mzero get put gets guard modify runStateT evalStateT execStateT
-             is_true bool_dec ZMap.get ZMap.set Int256Tree.get Int256Tree.set Int256Tree.empty Int256Tree.t hlist_hd
-             " ^ env.folded_external_symbol_string ^ "
+  Eval cbv -[" ^ cbv_ignore_base 
+               ^ env.folded_external_symbol_string ^ "
              " ^ !(env.folded_symbols) ^ "]
     in");
 	for i = 0 to nargs - 1 do
@@ -2563,19 +2635,13 @@ Section OBJECT_" ^ i ^ "_DEFINITION.
     synth_func_cond " ^ method_full_name ^ " " ^ method_full_name ^ "_wf " ^ args ^ " me d.
     Proof.
       intros " ^ args ^ " me d H_cond.
-      cbv -[" ^ cbv_ignore_base ^ "
-             ret bind mzero get put gets guard modify runStateT evalStateT execStateT
-             is_true bool_dec ZMap.get ZMap.set Int256Tree.get Int256Tree.set Int256Tree.empty Int256Tree.t hlist_hd
-             " ^ env.folded_external_symbol_string ^ "
+      cbv -[" ^ cbv_ignore_base ^ env.folded_external_symbol_string ^ "
              " ^ !(env.folded_symbols) ^ "].
        exact H_cond.
     Qed.
 
   Definition " ^ method_full_name ^ "_obligation "^ args ^ " me d  :=
-  Eval cbv -[" ^ cbv_ignore_base ^ "
-             ret bind mzero get put gets guard modify runStateT evalStateT execStateT
-             is_true bool_dec ZMap.get ZMap.set Int256Tree.get Int256Tree.set Int256Tree.empty Int256Tree.t hlist_hd
-             " ^ env.folded_external_symbol_string ^ "
+  Eval cbv -[" ^ cbv_ignore_base ^ env.folded_external_symbol_string ^ "
              " ^ !(env.folded_symbols) ^ "]
     in");
 	for i = 0 to nargs - 1 do
@@ -2601,10 +2667,7 @@ Section OBJECT_" ^ i ^ "_DEFINITION.
     synth_func_obligation " ^ method_full_name ^ " " ^ method_full_name ^ "_wf " ^ args ^ " me d.
     Proof.
       intros " ^ args ^ " me d H_cond.
-      cbv -[" ^ cbv_ignore_base ^ "
-             ret bind mzero get put gets guard modify runStateT evalStateT execStateT
-             is_true bool_dec ZMap.get ZMap.set Int256Tree.get Int256Tree.set Int256Tree.empty Int256Tree.t hlist_hd
-             " ^ env.folded_external_symbol_string ^ "
+      cbv -[" ^ cbv_ignore_base ^ env.folded_external_symbol_string ^ "
              " ^ !(env.folded_symbols) ^ "].
        exact H_cond.
     Qed.\n");
@@ -2613,10 +2676,7 @@ Section OBJECT_" ^ i ^ "_DEFINITION.
            m.aMethodSemantics = AStrap_info_ret then begin
           output_string out ("
   Definition " ^ method_full_name ^ "_spec :=
-  Eval cbv -[" ^ cbv_ignore_base ^ "
-             ret bind mzero get put gets guard modify
-             GetHighData is_true bool_dec ZMap.get ZMap.set Int256Tree.get Int256Tree.set Int256Tree.empty Int256Tree.t hlist_hd
-             " ^ env.folded_external_symbol_string ^ "
+  Eval cbv -[" ^ cbv_ignore_base ^ env.folded_external_symbol_string ^ "
              " ^ !(env.folded_symbols) ^ "]
   in apply_param_func (synth_func_spec_ret " ^ method_full_name ^ " " ^ method_full_name ^ "_wf) HNil.\n")
     end else begin (* [if] m.aMethodSemantics = AStrap_info_get || m.aMethodSemantics = AStrap_info_ret *)
@@ -2631,10 +2691,7 @@ Section OBJECT_" ^ i ^ "_DEFINITION.
     " ^ "fun " ^ args ^ " me => " ^
     return_pick ^ " (synth_func_spec_opt " ^ method_full_name ^ " " ^ method_full_name ^ "_wf" ^ args ^ " me).
   Proof.
-    cbv -[" ^ cbv_ignore_base ^ "
-          ret bind mzero get put gets guard modify
-          GetHighData is_true bool_dec ZMap.get ZMap.set Int256Tree.get Int256Tree.set Int256Tree.empty Int256Tree.t
-          " ^ env.folded_external_symbol_string ^ "
+    cbv -[" ^ cbv_ignore_base ^ env.folded_external_symbol_string ^ "
           " ^ !(env.folded_symbols) ^ "].
     reflexivity.
   Qed.\n")
@@ -2891,6 +2948,9 @@ let output_match_prop out ind oi m as_lemma =  (* if [not as_lemma] then output 
 let gen_layer_linksource env i l  =
   output_string (env.coq_LinkSource) ("\nDefinition "^ i ^ "_impl : res LAsm.module := \n");
 
+  let unmingledFieldName o f = 
+    (* l.aLayerName ^ "_" ^  *)
+    o.aObjectName ^ "_" ^ f.aObjectFieldName in
   let iter_functions action =
       List.iter (fun (_, o) ->
         if o.aObjectRequireImpl then
@@ -2909,9 +2969,9 @@ let gen_layer_linksource env i l  =
        List.iter (fun f ->
 	 if not f.aObjectFieldIsLogical then
 	   output_string env.coq_LinkSource
-			 ("var_"^o.aObjectName^"_"^ f.aObjectFieldName ^"_ident ↦ " ^o.aObjectName^ "_"^ f.aObjectFieldName ^"_globvar ⊕ ");
+			 ("var_"^o.aObjectName^"_"^ unmingledFieldName o f ^"_ident ↦ " ^o.aObjectName^ "_"^ unmingledFieldName o f ^"_globvar ⊕ ");
 	   output_string env.coq_Symbols
-			 ("  (var_"^o.aObjectName^"_"^ f.aObjectFieldName ^"_ident, \"" ^o.aObjectName^ "_"^ f.aObjectFieldName ^"\")::\n");	 
+			 ("  (var_"^o.aObjectName^"_"^ unmingledFieldName o f ^"_ident, \"" ^o.aObjectName^ "_"^ unmingledFieldName o f ^"\")::\n");	 
        ) o.aObjectFields
    ) l.aLayerFreshObjects;
 
@@ -2990,16 +3050,20 @@ Instance GlobalLayerSpec : LayerSpecClass := {
 }.
 Context`{HM : HyperMem (LayerSpec := GlobalLayerSpec)}.\n\n" in
 
+  let unmingledFieldName o f = 
+    (* base_layer.aLayerName ^ "_" ^  *)
+    o.aObjectName ^ "_" ^ f.aObjectFieldName in
+
   let _ = (* Variable passthrough premises *)
     List.iter (fun (_, o) -> List.iter (fun f ->
       output_string out ("  Context {" ^
-        o.aObjectName ^ "_" ^ f.aObjectFieldName ^ "_var_pt_prf : variable_passthrough_prf " ^
-        o.aObjectName ^ "_" ^ f.aObjectFieldName ^ "_var}.\n")
+        o.aObjectName ^ "_" ^ unmingledFieldName o f ^ "_var_pt_prf : variable_passthrough_prf " ^
+        o.aObjectName ^ "_" ^ unmingledFieldName o f ^ "_var}.\n")
     ) o.aObjectFields) base_layer.aLayerAllObjects;
     List.iter (fun f ->
       output_string out ("  Context {" ^
-        i ^ "_" ^ f.aObjectFieldName ^ "_var_pt_prf : variable_passthrough_prf " ^
-        i ^ "_" ^ f.aObjectFieldName ^ "_var}.\n")
+        i ^ "_" ^ unmingledFieldName o f ^ "_var_pt_prf : variable_passthrough_prf " ^
+        i ^ "_" ^ unmingledFieldName o f ^ "_var}.\n")
     ) o.aObjectFields in
 
   let _ = (* Methods passthrough lemmas *)
@@ -3419,6 +3483,13 @@ Instance GlobalLayerSpec : LayerSpecClass := {
     | None -> "I", fun _ -> "True"
     | Some s -> i ^ "_init_global_abstract_data_high_level_invariant",
                 fun abd -> s ^ " " ^ abd in
+                
+  let unmingledFieldName o f = 
+    (* l.aLayerName ^ "_" ^  *)
+    o.aObjectName ^ "_" ^ f.aObjectFieldName in
+  let unmingledFieldNameIO io f = 
+    (* l.aLayerName ^ "_" ^  *)
+    io ^ "_" ^ f.aObjectFieldName in
 
   let _ = (* invariants *)
     (* kernel_mode: hard coded for CertiKOS only *)
@@ -3428,10 +3499,10 @@ Definition " ^ i ^ "_kernel_mode (abd : global_abstract_data_type) :=");
     let have_clause = ref false in
     foreach_field (fun (io, f) ->
       if f.aObjectFieldType.aTypeDesc = ATbuiltin Tbool &&
-         (f.aObjectFieldName = "ikern" || f.aObjectFieldName = "ihost")
+         (unmingledFieldNameIO io f = "ikern" || unmingledFieldNameIO io f = "ihost")
       then begin
         if !have_clause then output_string out " /\\";
-        output_string out (" " ^ f.aObjectFieldName ^ " abd = true");
+        output_string out (" " ^ unmingledFieldNameIO io f ^ " abd = true");
         have_clause := true
       end);
     if not !have_clause then output_string out " True";
@@ -3444,8 +3515,8 @@ Class Layer_" ^ i ^ "_Context_prf  := {
   (* ensuring global empty data matches those in the object definitions *)");
     foreach_field (fun (io, f) ->
       output_string out (!record_field_leftover ^
-        i ^ "_init_" ^ f.aObjectFieldName ^ "_eq : " ^
-        f.aObjectFieldName ^ " init_global_abstract_data = ");
+        i ^ "_init_" ^ unmingledFieldNameIO io f ^ "_eq : " ^
+        unmingledFieldNameIO io f ^ " init_global_abstract_data = ");
       output_compile_time_constant out "    " f.aObjectFieldInitial;
       record_field_leftover := ";\n  "
     );
@@ -3740,6 +3811,14 @@ Context`{" ^ i ^ "_pres_inv : !" ^ i ^ "_preserves_invariants}.
 
 Existing Instances " ^ i ^ "_overlay_spec " ^ i ^ "_underlay_spec.\n") in
 
+    let unmingledFieldName o f = 
+      (* l.aLayerName ^ "_" ^  *)
+      o.aObjectName ^ "_" ^ f.aObjectFieldName in
+
+    let unmingledFieldNameOI oi f = 
+      (* l.aLayerName ^ "_" ^  *)
+      oi ^ "_" ^ f.aObjectFieldName in
+
     let relate_RData_name = (* Toward [HyperMem]: relate_RData *)
       if is_refine then
         refine_prop
@@ -3754,7 +3833,7 @@ Record relate_RData (j : meminj) (habd : GetHighData) (labd : GetLowData) : Prop
           if IdentSet.mem o.aObjectName base_layer.aLayerTipObjectSet then
             List.iter (fun f ->
               output_string out (!record_field_leftover ^
-                f.aObjectFieldName ^ "_re : ");
+                unmingledFieldName o f ^ "_re : ");
 (*              output_ht_inject out "    " ("(" ^ f.aObjectFieldName ^ " habd)")
                                           ("(" ^ f.aObjectFieldName ^ " labd)")
                                           f.aObjectFieldType; *)
@@ -3779,8 +3858,8 @@ Record relate_RData (j : meminj) (habd : GetHighData) (labd : GetLowData) : Prop
 Record match_RData (habd : GetHighData) (m : mem) (j : meminj) : Prop
     := MATCH_RDATA {\n  ") in
       iter_implemented_fields (fun oi f ->
-        output_string out (snd !record_field_leftover ^ f.aObjectFieldName ^
-          "_ma : variable_match " ^ oi ^ "_" ^ f.aObjectFieldName ^
+        output_string out (snd !record_field_leftover ^ unmingledFieldNameOI oi f ^
+          "_ma : variable_match " ^ oi ^ "_" ^ unmingledFieldNameOI oi f ^
           "_var habd m");
         record_field_leftover := (true, ";\n  ")
       );
@@ -3802,19 +3881,19 @@ Global Instance rel_ops: CompatRelOps GetHighDataX GetLowDataX :=
   match_AbData d1 m f := match_RData d1 m f;
   new_glbl := ");
       iter_implemented_fields (fun oi f ->
-        output_string out ("var_" ^ oi ^ "_" ^ f.aObjectFieldName ^ "_ident :: ")
+        output_string out ("var_" ^ oi ^ "_" ^ unmingledFieldNameOI oi f ^ "_ident :: ")
       );
       output_string out "nil
 }.\n";
       iter_implemented_fields (fun oi f ->
         output_string out ("
-Global Instance " ^ oi ^ "_" ^ f.aObjectFieldName ^ "_hyper_ltype_static :
-    HyperLTypeStatic " ^ oi ^ "_" ^ f.aObjectFieldName ^ "_var new_glbl.
+Global Instance " ^ oi ^ "_" ^ unmingledFieldNameOI oi f ^ "_hyper_ltype_static :
+    HyperLTypeStatic " ^ oi ^ "_" ^ unmingledFieldNameOI oi f ^ "_var new_glbl.
 Proof.
   split; try solve
     [ Decision.decision
     | simpl; auto
-    | simpl " ^ oi ^ "_" ^ f.aObjectFieldName ^ "_var.(ltype_offset);
+    | simpl " ^ oi ^ "_" ^ unmingledFieldNameOI oi f ^ "_var.(ltype_offset);
       rewrite Int256.unsigned_zero; apply Z.divide_0_r ].
 Qed.\n")
       );
@@ -4099,6 +4178,12 @@ let do_gen_layer_code env i l =
             action o.aObjectName f
         ) o.aObjectFields
     ) l.aLayerFreshObjects in
+  let unmingledFieldNameOI oi f = 
+    (* l.aLayerName ^ "_" ^  *)
+    oi ^ "_" ^ f.aObjectFieldName in
+  let unmingledFieldName o f = 
+    (* l.aLayerName ^ "_" ^  *)
+    o.aObjectName ^ "_" ^ f.aObjectFieldName in
 
   begin  (* Clight source module file--keep away from proofs.
             That is, we want Clight code and proofs to be in separate files, so we 
@@ -4128,7 +4213,7 @@ let do_gen_layer_code env i l =
   
   output_string out "Definition ge : genv := new_genv (";
   iter_implemented_fields (fun oi f ->
-  output_string out ("\n\t(var_" ^ oi ^ "_" ^ f.aObjectFieldName ^ "_ident," ^ 
+  output_string out ("\n\t(var_" ^ oi ^ "_" ^ unmingledFieldNameOI oi f ^ "_ident," ^ 
   " unpair_ty " ^ f.aObjectFieldType.aTypePairIdent ^ ")::"));
   output_string out ("nil)" ^ "\n\tnil" ^ "\n\t(");
 
@@ -4297,8 +4382,8 @@ Proof. esplit; ");
        object fields *)
     List.iter (fun f ->
       output_string code ("
-Instance " ^ o.aObjectName ^ "_" ^ f.aObjectFieldName ^ "_var_prf :
-    HyperLType " ^ o.aObjectName ^ "_" ^ f.aObjectFieldName ^ "_var.
+Instance " ^ o.aObjectName ^ "_" ^ unmingledFieldName o f ^ "_var_prf :
+    HyperLType " ^ o.aObjectName ^ "_" ^ unmingledFieldName o f ^ "_var.
 Proof. esplit; ");
       if f.aObjectFieldIsLogical then
         output_string code "[ typeclasses eauto | discriminate |].
@@ -4313,7 +4398,7 @@ Proof. esplit; ");
     intros j d m mm; apply mm.
   - (* ltype_get_match *)
     intros j d m mm dc; split.
-    admit. (* ht_ft_cond (ltype_get " ^ o.aObjectName ^ "_" ^ f.aObjectFieldName ^ "_var d) *)
+    admit. (* ht_ft_cond (ltype_get " ^ o.aObjectName ^ "_" ^ unmingledFieldName o f ^ "_var d) *)
     apply mm.
   - (* ltype_set_match *)
     intros f j d m fc mm dc m' disjoint_eq match_indirect.
@@ -4428,7 +4513,11 @@ let gen_layer_code env i l =
      ) l.aLayerFreshObjects then *)
     do_gen_layer_code env i l
 
-let gen_global_abstract_data_type env final_layer = function
+let unmingledFieldName l o f = 
+  (* l.aLayerName ^ "_" ^   *)
+  o.aObjectName ^ "_" ^ f.aObjectFieldName
+
+let gen_global_abstract_data_type env final_layer fileDeclarations = function
   | None ->  (* Collect all fields in [final_layer] for the type *)
     let iter_fields action =
        List.iter (fun (_, o) ->
@@ -4442,9 +4531,43 @@ let gen_global_abstract_data_type env final_layer = function
             ) o.aObjectFields
         ) final_layer.aLayerAllObjects
     in
+    let unmingledFieldName _o f = 
+      unmingledFieldName final_layer _o f
+    in
      
     let out = env.coq_DataTypeOps in
     let record_field_leftover = ref "\n  " in
+
+    output_string out "Require Import backend.MachineModel.\n";
+
+    List.iter (function
+    | i, ADlayer l ->
+      List.iter (fun (_, o) ->
+        match o.aObjectAddress with
+        | Some ad -> 
+          output_string out ("Definition " ^ o.aObjectName ^ 
+          "_address := " ^ "(Int256.repr " ^  (Backend.BinNumsExt.numstring2decimalstring ad) ^ ").\n")
+        | None -> 
+          ()
+      ) l.aLayerFreshObjects
+    | _, _ -> ()
+    ) fileDeclarations;
+
+    output_string out "Definition ext_call_me {adata: Type} (me : machine_env adata) (ext_contract : int256) := {|
+  me_address := ext_contract;
+  me_origin := me_origin me;
+  me_caller := me_address me;
+  me_callvalue := me_callvalue me; (* FIXME: the callvalue modeling is wrong *)
+  me_coinbase := me_coinbase me;
+  me_timestamp := me_timestamp me;
+  me_number := me_number me;
+  me_balance := me_balance me;
+  me_blockhash := me_blockhash me;
+  me_transfer := me_transfer me;
+  me_callmethod := me_callmethod me;
+  me_log := me_log me;
+|}.\n";
+
     output_string out "Record global_abstract_data_type : Type := {";
     iter_fields (fun _o f ->
         (* XXX: option for name mangling.
@@ -4454,19 +4577,19 @@ let gen_global_abstract_data_type env final_layer = function
            So we would like to prefix field names with the object names, etc. However, this has to
            be optional, because when we are reimplementing mcertikos, we want to use exactly the same
            names for everything. *)
-        output_string out (!record_field_leftover ^ f.aObjectFieldName ^ " : ");
+        output_string out (!record_field_leftover ^ unmingledFieldName _o f ^ " : ");
         output_type_expr out "    " f.aObjectFieldType;
         record_field_leftover := ";\n  "
     );
     output_string out "\n}.\n";
 
     iter_fields (fun o f ->
-        output_string out ("Definition update_"  ^ f.aObjectFieldName ^ " glabs_b (glabs_a : global_abstract_data_type)\n");
+        output_string out ("Definition update_"  ^ unmingledFieldName o f ^ " glabs_b (glabs_a : global_abstract_data_type)\n");
         output_string out ("  := Build_global_abstract_data_type ");	
 	iter_fields (fun o' f' ->
                       if (o' = o && f' = f)
 		      then output_string out "glabs_b "
-		      else output_string out ("(" ^ f'.aObjectFieldName ^ " glabs_a) ")
+		      else output_string out ("(" ^ unmingledFieldName o' f' ^ " glabs_a) ")
                    );
         output_string out ".\n"
     );
@@ -4476,7 +4599,7 @@ let gen_global_abstract_data_type env final_layer = function
     record_field_leftover := "\n  ";
     iter_fields (fun _o f ->
         (* XXX: option for name mangling *)
-        output_string out (!record_field_leftover ^ f.aObjectFieldName ^ " := ");
+        output_string out (!record_field_leftover ^ unmingledFieldName _o f ^ " := ");
         output_compile_time_constant out "      " f.aObjectFieldInitial;
         record_field_leftover := ";\n  "
     );
@@ -4491,7 +4614,7 @@ let gen_global_abstract_data_type env final_layer = function
           "(n : block)(abd : global_abstract_data_type) := {\n  ") in
     iter_fields (fun _o f ->
         (* XXX: option for name mangling *)
-        let field_name = f.aObjectFieldName  in
+        let field_name = unmingledFieldName _o f  in
         let inj, typed = generate_low_level_invariant "    "
                 "val_inject (Mem.flat_inj n)"
                 ("abd.(" ^ field_name ^ ")")
@@ -4523,20 +4646,20 @@ let gen_global_abstract_data_type env final_layer = function
     iter_fields (fun o f ->
         output_string out "\n";
 	iter_fields (fun o' f' ->
-          output_string out ("Lemma "  ^ f.aObjectFieldName ^ "_of_update_"^ f'.aObjectFieldName ^" : forall _x (glabs_a : global_abstract_data_type),\n"
-                             ^ "  " ^ f.aObjectFieldName ^ " (update_"^ f'.aObjectFieldName ^" _x glabs_a) = "  );
+          output_string out ("Lemma "  ^ unmingledFieldName o f ^ "_of_update_"^ unmingledFieldName o' f' ^" : forall _x (glabs_a : global_abstract_data_type),\n"
+                             ^ "  " ^ unmingledFieldName o f ^ " (update_"^ unmingledFieldName o' f' ^" _x glabs_a) = "  );
           if (o' = o && f' = f)
 	   then output_string out "_x.\n"
-	   else output_string out (f.aObjectFieldName ^ " glabs_a.\n");
+	   else output_string out (unmingledFieldName o f ^ " glabs_a.\n");
 	  output_string out "Proof. intros. destruct glabs_a. reflexivity. Qed.\n";
-          output_string out ("Hint Rewrite "^ f.aObjectFieldName ^"_of_update_"^ f'.aObjectFieldName^ " : updates.\n\n")
+          output_string out ("Hint Rewrite "^ unmingledFieldName o f ^"_of_update_"^ unmingledFieldName o' f' ^ " : updates.\n\n")
         );
     );
 
     if has_fields then begin
         output_string out ("Opaque");
         iter_fields (fun o f ->
-	    output_string out (" "^ f.aObjectFieldName ^" update_"^ f.aObjectFieldName ));
+	    output_string out (" "^ unmingledFieldName o f ^" update_"^ unmingledFieldName o f ));
         output_string out (".\n")
       end;
     
@@ -4561,7 +4684,7 @@ let gen_global_abstract_data_type env final_layer = function
 let gen_coqProj env fileDeclarations = 
   let stream = open_out (env.project_name ^ "/_CoqProject") in
   output_string stream (
-    "-R ../../ DeepSpec\n" ^
+    "-R ../../.. DeepSpec\n" ^
     "-R . " ^ env.project_name ^ "\n" ^
     "./EdsgerIdents.v\n" ^
     "./DataTypes.v\n" ^
@@ -4629,6 +4752,333 @@ let _ =
 ";
   close_out stream
 
+let gen_prf env fileDeclarations = 
+  let stream = open_out (env.project_name ^ "/prf.v") in
+  output_string stream (
+    "Require Import " ^ env.project_name ^ ".DataTypes.\n" ^
+    "Require Import " ^ env.project_name ^ ".DataTypeOps.\n" ^
+    "Require Import lib.Monad.StateMonadOption.\n" ^
+    "Require Import cclib.Maps.\n" ^
+    "Require Import cclib.Integers.\n" ^
+    "Require Import ZArith.\n" ^
+    "Require Import core.HyperTypeInst.\n" ^
+    "Require Import backend.MachineModel.\n"
+  );
+  List.iter (function 
+    | i, ADlayer l -> output_string stream ("Require Import " ^ env.project_name ^ ".Layer" ^ i ^ ".\n")
+    | _, _ -> ()
+    ) fileDeclarations;
+  output_string stream (
+      "\n" ^ 
+"Definition state := global_abstract_data_type.
+
+Definition init_state := init_global_abstract_data.
+
+Definition wei := Z.
+
+Definition addr := int256.
+
+Definition blocknumber := int256.
+
+Existing Instance GlobalLayerSpec.
+
+Section step.
+
+  Context (contract_address : addr).
+
+  Section mstep.
+  (* These are the parameters which are constant within a given block. *)
+  Context (coinbase : int256)
+          (timestamp : int256)
+          (number : int256)
+          (balance : int256 -> int256)
+          (blockhash : int256 -> int256)
+          (prev_contract_state : state).
+
+  Definition make_machine_env (caller: addr)
+                              : machine_env state
+    := {| me_address := contract_address;
+          me_origin := caller;
+          me_caller := caller; (* need update after every control-flow transfer *)
+          me_callvalue := Int256.repr (0);
+          me_coinbase := coinbase; 
+          me_timestamp := timestamp;
+          me_number := number;
+          me_balance := balance;
+          me_blockhash := blockhash;
+          (* not implemented *)
+          me_transfer _ _ _ _ _ := False;
+          me_callmethod _ _ _ _ _ _ _ _ _ _ := False;
+          me_log _ _ _ := prev_contract_state;
+        |}.
+
+  Import MonadNotation.
+
+  Definition lif {A:Type}
+                 (caller : addr)
+                 (cmd : machine_env state -> osT global_abstract_data_type A)
+    : osT state A :=
+    st  <- get;;
+    let me := make_machine_env caller in
+    match runStateT (cmd me) st with
+    | None => mzero
+    | Some (v, st') => put st' ;; ret v
+    end.
+
+  (* osT state int256 = 
+    state transformer with option monad, state is state, and value is int256 *)
+  Print osT. (* = fun D : Type => stateT D option *)
+  Print stateT. (* (S : Type) (m : Type -> Type) (t : Type) : Type := mkStateT
+  { runStateT : S -> m (t * S)%type } *)
+
+  Print runStateT. (* takes monad transformer, state, returns m (t * S) *)\n\n" ^ 
+
+"  (* How the state of the system changes in a single method call made by player p. *)
+  Inductive mstep u (st st' : state) : Prop :=\n"
+  );
+
+  List.iter (function
+  | i, ADlayer l ->
+    List.iter (fun (_, o) ->
+      List.iter (fun m ->
+        let method_full_name = o.aObjectName ^ "_" ^ m.aMethodName in
+        let args = if (List.length m.aMethodArguments) = 0 then "" else 
+          (if (List.nth m.aMethodArguments 0) = "()" then "" else (String.concat " " m.aMethodArguments)) in 
+        output_string stream ("  | " ^ method_full_name ^ "_step : " ^ "forall r " ^ args ^ 
+          ", runStateT (" ^ method_full_name ^ "_opt " ^ args ^ 
+          " (make_machine_env u)) st = Some (r, st')" ^ 
+        " -> mstep u st st' \n")
+      ) o.aObjectMethods
+    ) l.aLayerFreshObjects
+  | _, _ -> ()
+  ) fileDeclarations;
+
+  output_string stream ".\n";
+  output_string stream
+"
+  (* We can compute a new block by letting the players call the contract 
+     in some arbitrary order. *)
+     Inductive multi_mstep : state -> state -> Prop := 
+     | multi_mstep_reflexive : forall (st : state), multi_mstep st st
+     | multi_mstep_transitive : forall (st st' st'' : state) u,
+         multi_mstep st st' -> mstep u st' st'' -> multi_mstep st st''.
+
+
+     (* A block is sufficiently synchronous if every player got a chance to submit a 
+        transaction to to. *)
+     (* TODO, I think this definition is fine for now, but it seems little too clever,
+        should probably re-state this using some straightforward tracking of the states
+        we pass through. *)
+     Definition multi_mstep_synchronous st1 st2 :=
+       forall u, exists st st',
+                   multi_mstep st1 st /\\ mstep u st st' /\\ multi_mstep st' st2.
+
+     (* Here are a bunch of induction principles inspired by linear temporal logic. *)
+
+     (* Prove that some property P holds \"globally\", i.e. for each state along a 
+        path.
+        You can also specify a property Pprev which is known to hold for the
+        prev_contract_state. If not needed, it can just be True.
+    *)
+     Lemma multi_mstep_Global_ind : forall (Pprev P : state -> Prop),
+         (forall u st st', Pprev prev_contract_state -> P st -> mstep u st st' -> P st') ->
+          Pprev prev_contract_state -> forall st st', P st -> multi_mstep st st' -> P st'.
+     Proof.
+       induction 4; eauto.
+     Qed.
+
+     (*
+     (* Prove that P holds \"until\" Q  along a path. 
+        \"Until\" is a liveness assertion, so we need the synchronicity assumption. *)
+     Lemma multi_mstep_Until_ind : forall (Pprev P Q : state -> Prop),
+         (forall p st st', Pprev prev_contract_state -> P st -> In p players
+                           -> mstep p st st' -> (P st' \/ Q st')) ->
+                           Pprev prev_contract_state ->
+                           forall st,
+                             P st -> exists st',  multi_mstep st st' -> (P st' \/ Q st').
+     Proof.
+       induction 4; eauto *)
+
+     End mstep.
+
+
+     Definition Int256_incr x := Int256.add x Int256.one.
+
+     Inductive bstep (n : blocknumber) : state -> state -> Prop :=
+     | bstep_step : forall coinbase timestamp balance blockhash st st',
+         multi_mstep coinbase timestamp n balance blockhash st st st' ->
+         bstep n st st'.
+
+     Inductive multi_bstep : blocknumber -> state -> blocknumber -> state -> Prop := 
+     | multi_bstep_reflexive : forall n (st : state), multi_bstep n st n st
+     | multi_bstep_transitive : forall n n'  (st st' st'' : state),
+       multi_bstep n st n' st' -> bstep (Int256_incr n') st' st'' -> multi_bstep n st (Int256_incr n') st''.
+
+     (* multi_bstep is the step relation without any synchronicity assumption.
+        This is sufficient to prove some safety properties, but for most interesting 
+        theorems we instead need to use this synchronous version: *)
+
+     Inductive bstep_synch (n : blocknumber) : state -> state -> Prop :=
+     | bstep_synch_step : forall coinbase timestamp balance blockhash st st',
+         multi_mstep_synchronous coinbase timestamp n balance blockhash st st st' ->
+         bstep_synch n st st'.
+
+     Inductive multi_bstep_synch : blocknumber -> state -> blocknumber -> state -> Prop := 
+     | multi_bstep_synch_reflexive : forall n (st : state), multi_bstep_synch n st n st
+     | multi_bstep_synch_transitive : forall n n'  (st st' st'' : state),
+       multi_bstep_synch n st n' st' -> bstep_synch (Int256_incr n') st' st'' -> multi_bstep_synch n st (Int256_incr n') st''.
+
+     Lemma multi_bstep_Global_ind : forall (P : state -> Prop),
+         (forall coinbase timestamp number balance blockhash prev_block u st st',
+             P prev_block
+             -> P st
+             -> mstep coinbase timestamp number balance blockhash prev_block u st st'
+             -> P st')
+         -> forall n st n' st',
+           P st -> multi_bstep n st n' st' -> P st'.
+     Proof.
+       induction 3.
+       - auto.
+       - inversion H2; subst.
+         eapply multi_mstep_Global_ind with (st:=st') (prev_contract_state := st').
+         + intros.
+           refine (H _ _ _ _ _ _ _ _ _ _ _ H6); auto.
+         + apply IHmulti_bstep; assumption.
+         + apply IHmulti_bstep; assumption.
+         + exact H3.
+     Qed.
+   End step.
+
+   Section DeepSEAGenericProof.
+
+     Lemma Int256Tree_reduce : forall (i: int256) (v: Z) (t: Int256Tree.t Z), Int256Tree.get_default 0%Z i (Int256Tree.set i v t) = v.
+     Proof.
+       intros.
+       unfold Int256Tree.get_default.
+       rewrite Int256Tree.gss .
+       reflexivity.
+     Qed.
+
+     Lemma Int256Tree_mreduce : forall (i j : int256) (v v': Z) (t: Int256Tree.t Z), 
+       i <> j ->
+       Int256Tree.get_default 0%Z i (Int256Tree.set j v' (Int256Tree.set i v t)) = v.
+     Proof.
+       intros.
+       unfold Int256Tree.get_default.
+       rewrite Int256Tree.gso.
+       rewrite Int256Tree.gss.
+       reflexivity.
+       exact H.
+     Qed.
+
+     Lemma Int256Tree_mireduce : forall (i j k : int256) (v v': Z) (t: Int256Tree.t Z), 
+       i <> j ->
+       i <> k ->
+       j <> k ->
+       Int256Tree.get_default 0%Z i (Int256Tree.set j v' (Int256Tree.set k v t)) = 
+       Int256Tree.get_default 0%Z i t.
+     Proof.
+       intros.
+       unfold Int256Tree.get_default.
+       rewrite Int256Tree.gso.
+       rewrite Int256Tree.gso.
+       reflexivity.
+       exact H0.
+       exact H.
+     Qed.
+
+     Lemma add_sub_inv : forall (i j : Z32), (i + j - i)%Z = j.
+     Proof.
+       intros.
+       omega.
+     Qed.
+   End DeepSEAGenericProof.
+
+   Section Proof.   
+     Context (* (strategies : strategy_tuple) *)
+             (initial_balances : addr -> Z)
+             (contract_address : int256).
+
+     Context (init_bt init_rt : int256)
+             (init_coinbase : int256)
+             (init_timestamp : int256)
+             (init_number : int256)
+             (init_blockhash : int256 -> int256)
+             (pre_init_state init_state : state).
+
+     (* These are the parameters which are constant within a given block. *)
+     Context (coinbase : int256)
+             (timestamp : int256)
+             (number : int256)
+             (balance : int256 -> int256)
+             (blockhash : int256 -> int256)
+             (prev_contract_state : state).
+
+     Require Import lib.Monad.RunStateTInv.
+     Require Import lib.ArithInv.
+
+     Definition make_machine_env_wrapped prev_st user :=
+      make_machine_env contract_address coinbase timestamp number balance blockhash prev_st user.
+
+     Lemma make_machine_env_caller_eq : forall st caller, me_caller (make_machine_env_wrapped st caller) = caller.
+      Proof. auto. Qed.
+
+     Lemma make_machine_env_address_eq : forall st caller, me_address (make_machine_env_wrapped st caller) = contract_address.
+      Proof. auto. Qed.
+     \n";
+
+  List.iter (function
+  | i, ADlayer l ->
+    List.iter (fun (_, o) ->
+      List.iter (fun m ->
+        let method_full_name = o.aObjectName ^ "_" ^ m.aMethodName in
+        output_string stream ("Transparent " ^ method_full_name ^ "_opt.\n")
+      ) o.aObjectMethods
+    ) l.aLayerFreshObjects
+  | _, _ -> ()
+  ) fileDeclarations;
+
+  (* List.iter (function
+  | i, ADlayer l ->
+    List.iter (fun (_, o) ->
+      match o.aObjectAddress with
+      | Some ad -> 
+      output_string stream ("Definition " ^ o.aObjectName ^ 
+        "_address := " ^ "(Int256.repr " ^  (Backend.BinNumsExt.numstring2decimalstring ad) ^ ").\n")
+      | None -> 
+        ()
+    ) l.aLayerFreshObjects
+  | _, _ -> ()
+  ) fileDeclarations; *)
+
+  output_string stream ("\nLtac rds :=\n");
+
+  List.iter (function
+    | i, ADlayer l ->
+      List.iter (fun (_, o) ->
+        List.iter (fun m ->
+          let method_full_name = o.aObjectName ^ "_" ^ m.aMethodName in
+          output_string stream ("unfold " ^ method_full_name ^ "_opt in *;\n")
+        ) o.aObjectMethods
+      ) l.aLayerFreshObjects
+    | _, _ -> ()
+  ) fileDeclarations;
+
+  output_string stream
+"inv_runStateT;
+subst;
+inv_arith;
+simpl;
+try rewrite make_machine_env_caller_eq in *;
+try rewrite make_machine_env_address_eq in *;
+try rewrite Int256Tree_reduce in *;
+try rewrite Int256Tree_mreduce in *;
+try rewrite Int256Tree_mireduce in *;
+auto.\n";
+
+  output_string stream ("\nTheorem sample : forall n, n = n.\n");
+
+  output_string stream ("\nEnd Proof.\n")
 
 let coqgen filename ast =
   let final_layer = ref None in
@@ -4652,9 +5102,10 @@ let coqgen filename ast =
      ) ast.aFileDeclarations;
      begin match !final_layer with
      | None -> ()
-     | Some l -> gen_global_abstract_data_type env l ast.aFileGlobalAbstractDataType
+     | Some l -> gen_global_abstract_data_type env l ast.aFileDeclarations ast.aFileGlobalAbstractDataType
      end;
      gen_linksource env ast.aFileDeclarations;
+     gen_prf env ast.aFileDeclarations;
 #ifndef REDACTED
      gen_coqProj env ast.aFileDeclarations; 
      gen_extract_make env ast.aFileDeclarations;

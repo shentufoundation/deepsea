@@ -13,11 +13,11 @@ let deepsea_basename = "DeepSEA/AntChain-EVM"
 #else
 let deepsea_basename = "DeepSEA/EVM"
 #endif
-let deepsea_version_num = "1.1.0"
+let deepsea_version_num = "1.2.0"
 
 let deepsea_version = deepsea_basename ^ " " ^ deepsea_version_num
 
-type mode = ABI | BYTECODE | BYTECODE_RUNTIME | COMBINED_JSON | ASSEMBLY | MINIC | MINIC_VERBOSE | COQ | EWASM | EWASM_RUNTIME | METADATA
+type mode = ABI | BYTECODE | BYTECODE_RUNTIME | COMBINED_JSON | ASSEMBLY | MINIC | MINIC_VERBOSE | COQ | EWASM | EWASM_RUNTIME | METADATA | UCLID | CGRAPH | CLASH
 
 let string_of_token = function
   | ARRAY        -> "ARRAY"
@@ -39,6 +39,7 @@ let string_of_token = function
   | TRUSTED      -> "TRUSTED"
   | TYPE         -> "TYPE"
   | EVENT        -> "EVENT"
+  | REFINED      -> "COARSED"
 #ifdef ANT
   | IDENTITY      -> "IDENTITY"
 #else
@@ -61,7 +62,9 @@ let string_of_token = function
   | LET          -> "LET"
   | MATCH        -> "MATCH"
   | MOD          -> "MOD"
-  (* | SKIP      -> "SKIP" *)
+  | CLONE        -> "CLONE"
+  | COLONLESS    -> "COLONLESS"
+  (* | SKIP         -> "SKIP" *)
   | THEN         -> "THEN"
   | TO           -> "TO"
   | WITH         -> "WITH"
@@ -167,18 +170,19 @@ let print_ast_file_structure ast =
         else " except: " ^ String.concat ", " except)
     ) ast.aFileExternalVerbatim
 
-
 let usage () =
-  prerr_endline ( "usage: dsc program.ds (bytecode(-runtime)? | abi | combined-json | assembly | minic(-verbose)? | coq | ewasm(-runtime)? | metadata)\n"
+  prerr_endline ( "usage: dsc program.ds (bytecode(-runtime)? | abi | combined-json | assembly | minic(-verbose)? | coq | ewasm(-runtime)? | metadata | uclid | cgraph | clash)\n"
 		  ^"or     dsc --version\n");
   exit 1
 
 let combined_json filename abi bytecode =
-  Printf.sprintf "{\"contracts\":{\"%s\":{\"abi\":\"%s\", \"bin\":\"%s\"}}, \"version\":\"%s\"}"
+  let s = Printf.sprintf "{\"contracts\":{\"%s\":{\"abi\":\"%s\", \"bin\":\"%s\"}}, \"version\":\"%s\"}"
   		 filename
 		 (Str.global_replace (Str.regexp "\"") "\\\"" abi)
 		 bytecode
 		 deepsea_version
+  in
+  Yojson.Basic.to_string (Yojson.Basic.from_string s)
 
 let main argv =
   (if (Array.length argv = 2 && argv.(1) = "--version")
@@ -188,16 +192,17 @@ let main argv =
   let mode_flag = match Array.get argv 2 with
     | "bytecode"         -> BYTECODE
     | "bytecode-runtime" -> BYTECODE_RUNTIME
-    | "abi"              -> ABI
-    | "combined-json"    -> COMBINED_JSON
-    | "assembly"         -> ASSEMBLY
-    | "minic"            -> MINIC
-    | "minic-verbose"    -> MINIC_VERBOSE
-    | "coq"              -> COQ
-    | "ewasm"            -> EWASM
-    | "ewasm-runtime"    -> EWASM_RUNTIME
-    | "metadata"         -> METADATA
-    | _                  -> usage () in
+    | "abi"      -> ABI
+    | "combined-json" -> COMBINED_JSON
+    | "assembly" -> ASSEMBLY
+    | "minic"    -> MINIC
+    | "coq"      -> COQ
+    | "ewasm"     -> EWASM
+    | "uclid" -> UCLID
+    | "cgraph" -> CGRAPH
+    | "clash" -> CLASH
+    | "metadata" -> METADATA
+    | _          -> usage () in  
   (* print_endline ("reading from \"" ^ filename ^ "\""); *)
   let ch = open_in filename in
   let buf = Lexing.from_channel ch in
@@ -238,6 +243,38 @@ let main argv =
       | MINIC_VERBOSE -> let name_tables, ge = minicgen ast_structure in print_endline (Backend.LanguageExt.show_genv true name_tables ge)
       | EWASM -> print_endline (ewasm false ge)
       | EWASM_RUNTIME -> print_endline (ewasm true ge)
+      | UCLID -> Uclidgen.uclidgen filename ast_structure
+      | CGRAPH -> 
+        (match Backend.Glue.optm_genv ge with
+        | Backend.OptErrMonad.Error msg ->
+          print_endline ("Internal error: compilation failed in Cgraph backend\n"
+                          ^ "with error message: "
+                          ^ Backend.DatatypesExt.caml_string msg);
+          exit 1
+        | Backend.OptErrMonad.Success sd ->
+          let sd = Backend.DatatypesExt.caml_list sd in
+          let dummy = List.map (fun mnd ->
+            match Backend.DatatypesExt.caml_prod mnd with
+            | (cd, en) ->
+              print_endline (Backend.ASM.mnemonics_cgraph 
+              (List.map (fun x -> match Backend.DatatypesExt.caml_prod x with | (id, s) -> (id, s)) (Backend.DatatypesExt.caml_list cd))
+              en)) sd in ())
+      | CLASH -> 
+        (match Backend.Glue.optm_clash ge with
+        | Backend.OptErrMonad.Error msg ->
+          print_endline ("Internal error: compilation failed in Cgraph backend\n"
+                          ^ "with error message: "
+                          ^ Backend.DatatypesExt.caml_string msg);
+          exit 1
+        | Backend.OptErrMonad.Success cgd ->
+          (* list (positive * list positive)) *)
+          let cgd = Backend.DatatypesExt.caml_list cgd in
+          let dummy = List.map (fun cg ->
+          let cg' = 
+            (List.map (fun x -> match Backend.DatatypesExt.caml_prod x with | (id, lp) -> (id, Backend.DatatypesExt.caml_list lp)) 
+              (Backend.DatatypesExt.caml_list cg))
+          in
+          print_endline (Backend.ASM.mnemonics_clash cg')) cgd in ())
       | BYTECODE -> print_endline (bytecode false ge)
       | BYTECODE_RUNTIME -> print_endline (bytecode true ge)
       | ASSEMBLY -> print_endline (assembly ge)

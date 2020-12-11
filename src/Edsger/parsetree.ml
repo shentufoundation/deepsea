@@ -174,6 +174,7 @@ type p_object =
   }
 and p_object_desc =
   | POname of ident
+  | POclone of ident
   | POconstr of p_object_construct
   | POrelax of p_object * p_layer_signature
 
@@ -183,7 +184,16 @@ type p_object_definition = {
   pObjectLoc: location;
 }
 
-type p_layer_construct = (ident * p_object) list
+type p_object_inst =
+  {
+    p_object_inst_desc: p_object_inst_desc;
+    p_object_inst_loc: location
+  }
+and p_object_inst_desc = 
+  | POinternal of p_object
+  | POexternal of constant * p_object
+
+type p_layer_construct = (ident * p_object_inst) list
 
 type p_proposition =
   {
@@ -449,6 +459,8 @@ and string_of_p_object_desc = function
     | None -> *) "ON (" ^ i ^ ")" (*
     | Some t -> "ON (" ^ i ^ " : " ^ string_of_p_object_type t ^ ")"
     end *)
+  | POclone i -> 
+    "CLONE ON (" ^ i ^ ")"
   | POconstr c -> "{O{" ^ string_of_p_object_type c.pObjType ^
       string_of_p_object_kind c.pObjKind ^ "{ " ^
       String.concat ";\n  "
@@ -483,10 +495,16 @@ and string_of_p_layer_desc = function
     | None -> *) "CN (" ^ i ^ ")" (*
     | Some t -> "CN (" ^ i ^ " : " ^ string_of_p_layer_type t ^ ")"
     end *)
-  | PLconstr c -> "{C{" ^ (* string_of_p_layer_type_option d.pLayerType ^ *)
+  | PLconstr c -> 
+    "{C{" ^ (* string_of_p_layer_type_option d.pLayerType ^ *)
       (* string_of_p_annotations d.pLayerAnnotations ^ *) "{ " ^
       String.concat ";\n  "
-        (List.map (fun (i, o) -> i ^ " = " ^ string_of_p_object o) c) ^
+        (List.map (fun (i, o) -> 
+          let o = match o.p_object_inst_desc with
+          | POinternal io -> io
+          | POexternal (_, eo) -> eo
+          in
+          i ^ " = " ^ string_of_p_object o) c) ^
     "}}}"
   | PLrelax (c, t) -> "(" ^ string_of_p_layer c ^ " : " ^
                       string_of_p_layer_type t ^ ")"

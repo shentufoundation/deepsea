@@ -41,6 +41,8 @@ type evm =
 | Coq_evm_coinbase
 | Coq_evm_timestamp
 | Coq_evm_number
+| Coq_evm_chainid
+| Coq_evm_selfbalance
 | Coq_evm_difficulty
 | Coq_evm_gaslimit
 | Coq_evm_gas

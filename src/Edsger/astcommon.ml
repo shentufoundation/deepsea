@@ -18,6 +18,7 @@ type builtin_type =
 type method_kind =
   | MKnormal
   | MKlogical
+  | MKrefined
   | MKconst
   | MKghost
   | MKconstghost
@@ -86,6 +87,7 @@ let string_of_method_kind = function
   | MKghost -> "ghost "
   | MKconstghost -> "const ghost "
   | MKconstructor -> "constructor "
+  | MKrefined -> "refined "
 
 let string_of_constant = function
   | CONint n -> string_of_int n

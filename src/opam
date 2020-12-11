@@ -6,10 +6,9 @@ depends: [ "ocaml"           { = "4.09.0"    }
            "menhir"          { >= "20200612" }
            "cryptokit"       { >= "1.14"     }
            "cppo"            { = "1.6.6"     }
-           "cppo_ocamlbuild" { = "1.6.6"     }
            "yojson"
            "extlib"
-					 "core"
-					 "dune"
+           "core"
+           "dune"            { >= "2.7.0"     }
 ]
 

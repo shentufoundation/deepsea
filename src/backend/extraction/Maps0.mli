@@ -6,6 +6,8 @@ open Specif
 
 module PTree :
  sig
+  type elt = positive
+
   type 'a tree =
   | Leaf
   | Node of 'a tree * 'a option * 'a tree
@@ -19,6 +21,10 @@ module PTree :
   val set : positive -> 'a1 -> 'a1 t -> 'a1 t
 
   val remove : positive -> 'a1 t -> 'a1 t
+
+  val bempty : 'a1 t -> bool
+
+  val beq : ('a1 -> 'a1 -> bool) -> 'a1 t -> 'a1 t -> bool
 
   val prev_append : positive -> positive -> positive
 
@@ -43,7 +49,11 @@ module PTree :
 
   val fold : ('a2 -> positive -> 'a1 -> 'a2) -> 'a1 t -> 'a2 -> 'a2
 
+  val fold1 : ('a2 -> 'a1 -> 'a2) -> 'a1 t -> 'a2 -> 'a2
+
   val union : 'a1 t -> 'a1 t -> 'a1 t
+
+  val get_default : 'a1 -> elt -> 'a1 t -> 'a1
  end
 
 module PMap :

@@ -31,6 +31,8 @@ let mkobj ~loc d =
   { p_object_desc = d; p_object_loc = make_loc loc; }
 let mkobjdef ~loc objtyp obj = 
   { pObjectType = objtyp; pObjectDesc = obj; pObjectLoc = make_loc loc; }
+let mkobjinst ~loc objinstdesc =
+  { p_object_inst_desc = objinstdesc; p_object_inst_loc = make_loc loc; }
 let mkprop ~loc d = 
   { p_proposition_desc = d; p_proposition_loc = make_loc loc;}
 let mklayer ~loc d = 
@@ -92,6 +94,7 @@ let cons_either_double_list e (l1, l2) = match e with
 %token <string> UINT
 %token LAYER
 %token LOGICAL
+%token REFINED
 %token OBJECT
 /* %token OF */
 %token SIGNATURE
@@ -126,6 +129,7 @@ let cons_either_double_list e (l1, l2) = match e with
 %token THEN
 %token TO
 %token WITH
+%token CLONE
 
 %token AT
 %token ARROW
@@ -137,6 +141,7 @@ let cons_either_double_list e (l1, l2) = match e with
 %token COLON
 %token COLONCOLON       
 %token COLONGREATER
+%token COLONLESS
 %token COMMA
 %token CONJUNCTION
 %token DISJUNCTION
@@ -385,6 +390,7 @@ method_kind:
   | CONST GHOST { MKconstghost }
   | GHOST CONST { MKconstghost }
   | LOGICAL  { MKlogical }
+  | REFINED { MKrefined }
 ;
 idents_semi:
     idents_semi_sep opt_semi  { List.rev $1 }
@@ -558,18 +564,6 @@ struct_field:
 command_core:
     e=expression  { PCyield e }
 
-  /* | LPAREN commands RPAREN  { $2 } */
-  /* causes harmless reduce/reduce conflict:
-
-       command_core -> LPAREN commands RPAREN
-                   ->* LPAREN command_core RPAREN
-                    -> LPAREN expression RPAREN
-
-       command_core -> expression
-                    -> LPAREN comma_sep_expressions RPAREN
-                    -> LPAREN expression RPAREN
-
-  */
 
   | BEGIN c=commands END  { c.p_command_desc }
   | MATCH e=expression WITH opt_bar match_clauses END  { (PCmatch (mkexp_ ~loc:$sloc e.p_expression_desc, List.rev $5)) }
@@ -753,6 +747,7 @@ opt_type_annotation:
 
 object_expression:
     IDENT  { mkobj ~loc:$sloc (POname $1) }
+  | CLONE IDENT  {mkobj ~loc:$sloc (POclone $2)}
   | object_expression COLONGREATER layer_signature  { mkobj ~loc:$sloc (POrelax ($1, $3)) }
   | LPAREN object_expression RPAREN  { $2 }
 ;
@@ -798,7 +793,12 @@ layer_slots_plus:
   | layer_slots_plus SEMICOLON layer_slot  { $3 :: $1 }
 ;
 layer_slot:
-    IDENT EQUAL object_expression  { $1, $3 }
+    IDENT EQUAL layer_obj_inst  { $1, $3 }
+;
+layer_obj_inst:
+    object_expression { mkobjinst ~loc:$sloc (POinternal $1) }
+  | ADDRESS LPAREN INT RPAREN COLONLESS object_expression { mkobjinst ~loc:$sloc (POexternal ((CONaddress $3), $6)) }
+  | ADDRESS LPAREN UINT RPAREN COLONLESS object_expression { mkobjinst ~loc:$sloc (POexternal ((CONaddress $3), $6)) }
 ;
 
 annotations:

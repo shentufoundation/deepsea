@@ -18,6 +18,7 @@ type builtin_type =
 type method_kind =
   | MKnormal
   | MKlogical
+  | MKrefined
   | MKconst
   | MKghost
   | MKconstghost

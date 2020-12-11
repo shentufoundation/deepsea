@@ -441,6 +441,12 @@ let rec gen_rexpr e =
   | AEbuiltin ("number",[]) ->
      Ecall0 (Backend.MachineModel.Bnumber,
 	     gen_ctype e.aRexprType.aTypeCtype)
+  | AEbuiltin ("chainid",[]) ->
+     Ecall0 (Backend.MachineModel.Bchainid,
+	     gen_ctype e.aRexprType.aTypeCtype)
+  | AEbuiltin ("selfbalance",[]) ->
+     Ecall0 (Backend.MachineModel.Bselfbalance,
+	     gen_ctype e.aRexprType.aTypeCtype)
   | AEbuiltin ("balance",[e1]) ->
      Ecall1 (Backend.MachineModel.Bbalance, (gen_rexpr e1),
 	     gen_ctype e.aRexprType.aTypeCtype)

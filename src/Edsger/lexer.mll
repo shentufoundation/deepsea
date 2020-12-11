@@ -15,6 +15,7 @@ let keyword_table =
     "constructor", CONSTRUCTOR;
     "layer", LAYER;
     "logical", LOGICAL;
+    "coarsed", REFINED;
     "object", OBJECT;
     (* "of", OF; *)
     "signature", SIGNATURE;
@@ -47,7 +48,8 @@ let keyword_table =
     "then", THEN;
     "to", TO;
     "with", WITH;
-    "list", LIST
+    "list", LIST;
+    "clone", CLONE;
   ];
   tbl
 
@@ -114,6 +116,7 @@ rule token = parse
   | "::" { COLONCOLON }
   | ":" { COLON }
   | ":>" { COLONGREATER }
+  | "<:" { COLONLESS }
   | "," { COMMA }
   | "/\\" { CONJUNCTION }
   | "\\/" { DISJUNCTION }

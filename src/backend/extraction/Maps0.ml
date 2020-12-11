@@ -6,6 +6,8 @@ open Specif
 
 module PTree =
  struct
+  type elt = positive
+
   type 'a tree =
   | Leaf
   | Node of 'a tree * 'a option * 'a tree
@@ -81,6 +83,41 @@ module PTree =
              | Leaf -> Leaf
              | Node (_, _, _) -> Node (l, None, r))
           | Node (_, _, _) -> Node (l, None, r)))
+
+  (** val bempty : 'a1 t -> bool **)
+
+  let rec bempty = function
+  | Leaf -> Coq_true
+  | Node (l, o, r) ->
+    (match o with
+     | Some _ -> Coq_false
+     | None ->
+       (match bempty l with
+        | Coq_true -> bempty r
+        | Coq_false -> Coq_false))
+
+  (** val beq : ('a1 -> 'a1 -> bool) -> 'a1 t -> 'a1 t -> bool **)
+
+  let rec beq beqA m1 m2 =
+    match m1 with
+    | Leaf -> bempty m2
+    | Node (l1, o1, r1) ->
+      (match m2 with
+       | Leaf -> bempty m1
+       | Node (l2, o2, r2) ->
+         (match match match o1 with
+                      | Some y1 ->
+                        (match o2 with
+                         | Some y2 -> beqA y1 y2
+                         | None -> Coq_false)
+                      | None ->
+                        (match o2 with
+                         | Some _ -> Coq_false
+                         | None -> Coq_true) with
+                | Coq_true -> beq beqA l1 l2
+                | Coq_false -> Coq_false with
+          | Coq_true -> beq beqA r1 r2
+          | Coq_false -> Coq_false))
 
   (** val prev_append : positive -> positive -> positive **)
 
@@ -159,10 +196,27 @@ module PTree =
   let fold f m v =
     xfold f Coq_xH m v
 
+  (** val fold1 : ('a2 -> 'a1 -> 'a2) -> 'a1 t -> 'a2 -> 'a2 **)
+
+  let rec fold1 f m v =
+    match m with
+    | Leaf -> v
+    | Node (l, o, r) ->
+      (match o with
+       | Some x -> let v1 = fold1 f l v in let v2 = f v1 x in fold1 f r v2
+       | None -> let v1 = fold1 f l v in fold1 f r v1)
+
   (** val union : 'a1 t -> 'a1 t -> 'a1 t **)
 
   let union m1 m2 =
     fold (fun m k v -> set k v m) m1 m2
+
+  (** val get_default : 'a1 -> elt -> 'a1 t -> 'a1 **)
+
+  let get_default default k m =
+    match get k m with
+    | Some v -> v
+    | None -> default
  end
 
 module PMap =

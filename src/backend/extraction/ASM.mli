@@ -1,5 +1,5 @@
 open Integers
-(* open WasmPre *)
+open StmtCGraph
 
 type asm (* representation corresponding directly to real EVM instructions *)
 type asm_program  = asm list
@@ -21,3 +21,5 @@ val mnemonics : asm_program  -> string
 val mnemonics_wasm : Structure.coq_module -> bool -> Int.int list -> bool -> string
 
 val size_of_program : asm list -> int
+val mnemonics_cgraph : (BinNums.positive * StmtCGraph.statement) list -> BinNums.positive -> string
+val mnemonics_clash : (BinNums.positive * (BinNums.positive list)) list -> string

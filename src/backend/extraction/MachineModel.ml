@@ -7,6 +7,8 @@ type builtin0 =
 | Bcoinbase
 | Btimestamp
 | Bnumber
+| Bchainid
+| Bselfbalance
 
 type builtin1 =
 | Bbalance

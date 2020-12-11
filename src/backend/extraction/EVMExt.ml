@@ -39,6 +39,8 @@ let show = function
   | EVM.Coq_evm_coinbase -> "COINBASE"
   | EVM.Coq_evm_timestamp -> "TIMESTAMP"
   | EVM.Coq_evm_number -> "NUMBER"
+  | EVM.Coq_evm_chainid -> "CHAINID"
+  | EVM.Coq_evm_selfbalance -> "SELFBALANCE"
   | EVM.Coq_evm_difficulty -> "DIFFICULTY"
   | EVM.Coq_evm_gaslimit -> "GASLIMIT"
   | EVM.Coq_evm_gas -> "GAS"

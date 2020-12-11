@@ -1,10 +1,13 @@
 open AST
+open Ascii
 open Ctypes
 open Datatypes
 open Decimal
 open Globalenvs
 open MachineModel
 open Nat0
+open OptErrMonad
+open String0
 open Structure
 open Values
 
@@ -95,7 +98,7 @@ val load_len_hash : nat -> instr list
 
 val load_resultOffset : nat -> instr list
 
-val wasm_builtin0 : builtin0 -> instr list
+val wasm_builtin0 : builtin0 -> instr list optErr
 
 val wasm_builtin1 : builtin1 -> instr list
 

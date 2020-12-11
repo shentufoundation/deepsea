@@ -250,6 +250,7 @@ type a_method_definition = {
 
 type a_object = {
   aObjectName : ident;
+  aObjectAddress : string option;
   (*aObjectSerial : int;*)
   aObjectCoreType : a_object_type;
   aObjectType : a_object_type;

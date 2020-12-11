@@ -1255,7 +1255,7 @@ let rec stacked_code temps f = function
           Coq_true, Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)),
           EmptyString)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
         (fun t0 ->
-        bind (Obj.magic coq_Monad_optErr) (stacked_expr temps rv O Coq_false)
+        bind (Obj.magic coq_Monad_optErr) (stacked_expr temps rv O Coq_true)
           (fun rv' ->
           ret (Obj.magic coq_Monad_optErr)
             (app rv' (Coq_cons ((Sset t0), trest)))))

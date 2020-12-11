@@ -1,8 +1,3 @@
-cppo_defs := # -tag "cppo_D(REDACTED)" # Quotes are necessary
-cppo_flags = -use-ocamlfind -plugin-tag "package(cppo_ocamlbuild)" $(cppo_defs)
-
-packages := cryptokit,extlib,yojson
-
 core: core.make
 	make -f core.make
 

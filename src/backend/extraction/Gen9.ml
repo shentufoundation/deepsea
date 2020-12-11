@@ -140,8 +140,31 @@ let rec wasm_expr temps e rvalue =
            (String ((Ascii (Coq_false, Coq_true, Coq_true, Coq_true,
            Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
            (Coq_false, Coq_false, Coq_true, Coq_false, Coq_true, Coq_true,
-           Coq_true, Coq_false)),
-           EmptyString)))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+           Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
+           Coq_false, Coq_false, Coq_false, Coq_true, Coq_false, Coq_false)),
+           (String ((Ascii (Coq_true, Coq_false, Coq_false, Coq_true,
+           Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
+           (Coq_false, Coq_true, Coq_true, Coq_true, Coq_false, Coq_true,
+           Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
+           Coq_false, Coq_false, Coq_false, Coq_true, Coq_false, Coq_false)),
+           (String ((Ascii (Coq_true, Coq_true, Coq_true, Coq_false,
+           Coq_true, Coq_false, Coq_true, Coq_false)), (String ((Ascii
+           (Coq_true, Coq_false, Coq_false, Coq_false, Coq_false, Coq_true,
+           Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_true,
+           Coq_false, Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)),
+           (String ((Ascii (Coq_true, Coq_false, Coq_true, Coq_true,
+           Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
+           (Coq_true, Coq_true, Coq_true, Coq_true, Coq_false, Coq_true,
+           Coq_false, Coq_false)), (String ((Ascii (Coq_true, Coq_true,
+           Coq_true, Coq_false, Coq_false, Coq_false, Coq_true, Coq_false)),
+           (String ((Ascii (Coq_true, Coq_false, Coq_true, Coq_false,
+           Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
+           (Coq_false, Coq_true, Coq_true, Coq_true, Coq_false, Coq_true,
+           Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_true,
+           Coq_true, Coq_true, Coq_false, Coq_true, Coq_false, Coq_false)),
+           (String ((Ascii (Coq_false, Coq_true, Coq_true, Coq_false,
+           Coq_true, Coq_true, Coq_true, Coq_false)),
+           EmptyString)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
          (fun ind ->
          ret (Obj.magic coq_Monad_optErr) (Coq_cons ((Local_get ind),
            Coq_nil)))
@@ -671,8 +694,8 @@ let rec wasm_expr temps e rvalue =
   | Ecall0 (b, _) ->
     (match rvalue with
      | Coq_true ->
-       bind (Obj.magic coq_Monad_optErr) (Success (wasm_builtin0 b))
-         (fun b' -> ret (Obj.magic coq_Monad_optErr) b')
+       bind (Obj.magic coq_Monad_optErr) (wasm_builtin0 b) (fun b' ->
+         ret (Obj.magic coq_Monad_optErr) b')
      | Coq_false ->
        Error (String ((Ascii (Coq_true, Coq_false, Coq_false, Coq_false,
          Coq_false, Coq_false, Coq_true, Coq_false)), (String ((Ascii
@@ -1796,8 +1819,12 @@ let wasm_function _ funident_map f =
          Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
          Coq_true, Coq_true, Coq_true, Coq_false, Coq_true, Coq_false,
          Coq_false)), (String ((Ascii (Coq_false, Coq_true, Coq_true,
-         Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)),
-         EmptyString))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+         Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)), (String
+         ((Ascii (Coq_false, Coq_true, Coq_false, Coq_true, Coq_true,
+         Coq_true, Coq_false, Coq_false)), (String ((Ascii (Coq_false,
+         Coq_false, Coq_false, Coq_false, Coq_false, Coq_true, Coq_false,
+         Coq_false)),
+         EmptyString))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
          msg))
 
 (** val wasm_constructor :

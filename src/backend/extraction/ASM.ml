@@ -1,5 +1,6 @@
 open Integers
-(* open WasmPre *)
+open StmtCGraph
+open ExpCintptr
 
 module Links = Map.Make(struct type t = AST.label let compare = compare end)
 
@@ -44,6 +45,8 @@ type asm =
 | EVM_NUMBER
 | EVM_DIFFICULTY
 | EVM_GASLIMIT
+| EVM_CHAINID
+| EVM_SELFBALANCE
 | EVM_GAS
 | EVM_CODECOPY
 | EVM_POP
@@ -129,6 +132,129 @@ let assemble_pushdata n data =
   in
   pad (n * 2) (hex_of_coq_int data)
 
+let rec hex_of_coq_pos partial count =
+  let rec pow2 = function
+    | 0 -> 1
+    | n -> 2 * (pow2 (n-1)) in
+  let lastchar = if count == 4 then Printf.sprintf "%x" partial else ""
+  and partial = if count == 4 then 0 else partial
+  and count = count mod 4
+  in function
+  | BinNums.Coq_xI rest -> (hex_of_coq_pos (partial + (pow2 count)) (count + 1) rest) ^ lastchar
+  | BinNums.Coq_xO rest -> (hex_of_coq_pos partial (count + 1) rest) ^ lastchar
+  | BinNums.Coq_xH -> (hex (partial + (pow2 count))) ^ lastchar
+
+(* hex_of_coq_pos 0 0 v *)
+
+let rec scgraph_expr e = 
+  let spos = hex_of_coq_pos 0 0 in
+  match e with
+  | Econst_int (i, t) -> "int"
+  | Econst_int256 (v, t) -> "0x" ^ assemble_pushdata (allocate v) v
+  | Etempvar (i, t) -> "tempvar_" ^ spos i
+  | Esload (e, t) -> "(sload " ^ scgraph_expr e ^ ")"
+  | Emload (e, t) -> "(mload " ^ scgraph_expr e ^ ")"
+  | Eaddr (e, t) -> "(addr " ^ scgraph_expr e ^ ")"
+  | Eunop (uo, e, t) -> "(unop @ " ^ scgraph_expr e ^ ")"
+  | Ebinop (bo, e1, e2, t) -> "(binop @ " ^ scgraph_expr e1 ^ " " ^ scgraph_expr e2 ^ ")"
+  | Ecall0 (b0, t) -> "call0"
+  | Ecall1 (b1, e, t) -> "(call1 " ^ scgraph_expr e ^ ")"
+
+let getlabel id s = 
+  let spos = hex_of_coq_pos 0 0 in
+  match s with 
+  | StmtCGraph.Sskip n -> 
+    "\"" ^ (spos id) ^ " : skip\""
+  | Ssassign (e1, e2, n) -> 
+    "\"" ^ (spos id) ^ " : " ^ scgraph_expr e1 ^ " :s= " ^ scgraph_expr e2 ^ "\""
+  | Smassign (e1, e2, n) -> 
+    "\"" ^ (spos id) ^ " : " ^ scgraph_expr e1 ^ " :m= " ^ scgraph_expr e2 ^ "\""
+  | Sset (i, e, n) -> 
+    "\"" ^ (spos id) ^ " : " ^ "tempvar_" ^ spos i ^ " = " ^ scgraph_expr e ^ "\""
+  | Scall (retval, l, el, n) -> 
+    "\"" ^ (spos id) ^ " : call\""
+  | Scond (e, n, n') -> 
+    "\"" ^ (spos id) ^ " : if " ^ scgraph_expr e ^ "\""
+  | Shash (e1, e2, eo, n') -> 
+    "\"" ^ (spos id) ^ " : shash  \""
+  | Sreturn (eo, n) -> 
+    "\"" ^ (spos id) ^ " : return \""
+  | Sdone -> 
+    "\"" ^ (spos id) ^ " : done \""
+  | Stransfer (e1, e2, n, n') -> 
+    "\"" ^ (spos id) ^ " : transfer \""
+  | StmtCGraph.Scallmethod (eil, il, i, e, el, n, n') ->
+    "\"" ^ (spos id) ^ " : callmethod \""
+  | Slog (el1, el2, n) -> 
+    "\"" ^ (spos id) ^ " : log \""
+  | Srevert ->
+    "\"" ^ (spos id) ^ " : revert \""
+
+let mnemonics_cgraph cd en = 
+  let spos = hex_of_coq_pos 0 0 in
+  "digraph mygraph {
+  node [shape=box];
+
+  \"entry\"
+  \"entry\" -> \"" ^ spos en ^ "\"\n" ^  
+  String.concat "\n"
+  (List.map (fun x -> 
+    match x with
+    | (id, s) ->
+      let label = getlabel id s in
+      let transitionsn n = 
+        String.concat "\n"
+        (List.map
+        (fun x -> match x with | (id, s') -> label ^ " -> " ^ getlabel id s')
+        (List.filter (fun x -> match x with | (id, s) -> if id = n then true else false) cd))
+      in
+      match s with
+      | Sskip n -> 
+        label ^ "\n" ^ transitionsn n
+      | Smassign (e1, e2, n) -> 
+        label ^ "\n" ^ transitionsn n
+      | Ssassign (e1, e2, n) -> 
+        label ^ "\n" ^ transitionsn n
+      | Sset (i, e, n) -> 
+        label ^ "\n" ^ transitionsn n
+      | Scall (io, l, el, n) -> 
+        label ^ "\n" ^ transitionsn n
+      | Scond (e, n1, n2) -> 
+        label ^ "\n" ^ transitionsn n1 ^ "\n" ^ transitionsn n2
+      | Sreturn (eo, n) -> 
+        label ^ "\n" ^ transitionsn n
+      | Shash (e1, e2, eo, n) -> 
+        label ^ "\n" ^ transitionsn n
+      | Sdone -> 
+        label ^ "\n"
+      | Stransfer (e1, e2, n1, n2) -> 
+        label ^ "\n" ^ transitionsn n1 ^ "\n" ^ transitionsn n2
+      | Scallmethod (eil, il, i, e, el, n1, n2) ->
+        label ^ "\n" ^ transitionsn n1 ^ "\n" ^ transitionsn n2
+      | Slog (el1, el2, n) -> 
+        label ^ "\n" ^ transitionsn n
+      | Srevert -> 
+        label ^ "\n"
+    ) cd)
+  ^ "\n}"
+
+let mnemonics_clash cg = 
+  let spos = hex_of_coq_pos 0 0 in
+  "digraph mygraph {
+  node [shape=box];\n" ^
+  String.concat "\n"
+  (List.map (fun x -> 
+    let label a = "\" tempvar_" ^ (spos a) ^ " \"" in
+    match x with
+    | (id, l) ->
+      label id ^ "\n" ^ 
+      (String.concat "\n"
+      (List.map (fun xx -> 
+        label id ^ " -> " ^ label xx
+      ) l))
+    ) cg)
+  ^ "\n}"
+
 let constructor_counter = ref (-1)
 
 (* compute the bytecode for an opcode *)
@@ -174,6 +300,8 @@ let transform_inst links = function
   | EVM.Coq_evm_coinbase           -> EVM_COINBASE
   | EVM.Coq_evm_timestamp          -> EVM_TIMESTAMP
   | EVM.Coq_evm_number             -> EVM_NUMBER
+  | EVM.Coq_evm_chainid            -> EVM_CHAINID
+  | EVM.Coq_evm_selfbalance        -> EVM_SELFBALANCE
   | EVM.Coq_evm_difficulty         -> EVM_DIFFICULTY
   | EVM.Coq_evm_gaslimit           -> EVM_GASLIMIT
   | EVM.Coq_evm_gas                -> EVM_GAS
@@ -243,6 +371,8 @@ let assemble_inst programsize = function
   | EVM_NUMBER -> "43"
   | EVM_DIFFICULTY -> "44"
   | EVM_GASLIMIT -> "45"
+  | EVM_CHAINID -> "46"
+  | EVM_SELFBALANCE -> "47"
   | EVM_GAS -> "5a"
   | EVM_CODECOPY -> "39"
   | EVM_POP -> "50"
@@ -306,6 +436,8 @@ let show_asm_inst = function
   | EVM_NUMBER -> "NUMBER"
   | EVM_DIFFICULTY -> "DIFFICULTY"
   | EVM_GASLIMIT -> "GASLIMIT"
+  | EVM_CHAINID -> "CHAINID"
+  | EVM_SELFBALANCE -> "SELFBALANCE"
   | EVM_GAS -> "GAS"
   | EVM_CODECOPY -> "CODECOPY"
   | EVM_POP -> "POP"

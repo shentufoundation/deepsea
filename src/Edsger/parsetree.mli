@@ -153,6 +153,7 @@ type p_object = { p_object_desc : p_object_desc; p_object_loc : location; }
 
 and p_object_desc =
     POname of Astcommon.ident
+  | POclone of Astcommon.ident
   | POconstr of p_object_construct
   | POrelax of p_object * p_layer_signature
 
@@ -162,7 +163,16 @@ type p_object_definition = {
   pObjectLoc : location;
 }
 
-type p_layer_construct = (Astcommon.ident * p_object) list
+type p_object_inst =
+  {
+    p_object_inst_desc: p_object_inst_desc;
+    p_object_inst_loc: location
+  }
+and p_object_inst_desc = 
+  | POinternal of p_object
+  | POexternal of constant * p_object
+
+type p_layer_construct = (Astcommon.ident * p_object_inst) list
 
 type p_proposition = {
   p_proposition_desc : p_proposition_desc;

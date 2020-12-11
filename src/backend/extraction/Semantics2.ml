@@ -377,7 +377,14 @@ let stm_eq_dec stm stm' =
            | _ -> Coq_right)
         | Bnumber -> (match b0 with
                       | Bnumber -> Coq_left
-                      | _ -> Coq_right))
+                      | _ -> Coq_right)
+        | Bchainid -> (match b0 with
+                       | Bchainid -> Coq_left
+                       | _ -> Coq_right)
+        | Bselfbalance ->
+          (match b0 with
+           | Bselfbalance -> Coq_left
+           | _ -> Coq_right))
      | _ -> Coq_right)
   | Scall1 x ->
     (match stm' with

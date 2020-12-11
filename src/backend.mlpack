@@ -50,7 +50,7 @@ backend/extraction/LanguageExt
 backend/extraction/List0
 backend/extraction/LowValues
 backend/extraction/MachineModel
-backend/extraction/MachineModelLow
+backend/extraction/MachineModelExt
 backend/extraction/Maps0
 backend/extraction/MemoryModel
 backend/extraction/Monad

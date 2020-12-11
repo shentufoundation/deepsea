@@ -1,4 +1,5 @@
 open AST
+open BinNums
 open Datatypes
 open EVM
 open Gen2
@@ -16,6 +17,7 @@ open GlobalenvCompile
 open Integers
 open Monad
 open OptErrMonad
+open StmtCGraph
 open StmtMiniC
 open Structure
 
@@ -32,6 +34,27 @@ let full_compile_genv_wasm ge =
           (fun wasm_prog ->
           bind (Obj.magic coq_Monad_optErr) (genv_compiled_wasm wasm_prog)
             (fun program_n_c -> ret (Obj.magic coq_Monad_optErr) program_n_c)))))
+
+(** val optm_genv :
+    genv -> ((positive, StmtCGraph.statement) prod list, positive) prod list
+    optErr **)
+
+let optm_genv ge =
+  bind (Obj.magic coq_Monad_optErr) (Obj.magic clike_genv ge) (fun clike ->
+    bind (Obj.magic coq_Monad_optErr) (Obj.magic clocal_genv clike)
+      (fun clocal ->
+      bind (Obj.magic coq_Monad_optErr) (Obj.magic cintptr_genv clocal)
+        cgraph_viz))
+
+(** val optm_clash :
+    genv -> (positive, positive list) prod list list optErr **)
+
+let optm_clash ge =
+  bind (Obj.magic coq_Monad_optErr) (Obj.magic clike_genv ge) (fun clike ->
+    bind (Obj.magic coq_Monad_optErr) (Obj.magic clocal_genv clike)
+      (fun clocal ->
+      bind (Obj.magic coq_Monad_optErr) (Obj.magic cintptr_genv clocal)
+        clash_viz))
 
 (** val full_compile_genv : genv -> (evm list, label) prod optErr **)
 

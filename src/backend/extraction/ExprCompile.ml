@@ -276,6 +276,8 @@ let builtin0_compiled = function
 | Bcoinbase -> Coq_evm_coinbase
 | Btimestamp -> Coq_evm_timestamp
 | Bnumber -> Coq_evm_number
+| Bchainid -> Coq_evm_chainid
+| Bselfbalance -> Coq_evm_selfbalance
 
 (** val builtin1_compiled : builtin1 -> evm **)
 

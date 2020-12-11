@@ -18,6 +18,12 @@ let rec check_for_all f xs = match xs with
   | [] -> OK
   | x::xs -> check_and (f x) (check_for_all f xs)
 
+let fresh_serial = ref 0 (* I know this is an ugly hack *)
+
+let fresh id = 
+  fresh_serial := !fresh_serial + 1;
+  id ^ string_of_int !fresh_serial
+
 (* These are "static" because they remain constant when checking an
    entire function body (although they are different for different functions). *)
 type cmd_static_env_t = {
@@ -206,6 +212,7 @@ let dummy_object i =
   let t = { aObjectBase = dummy_layer_signature (i ^ "_base");
             aObjectSignature = dummy_signature (i ^ "_rec") }
   in { aObjectName = i; (*aObjectSerial = -1;*)
+       aObjectAddress = None;
        aObjectCoreType = t; aObjectType = t;
        aObjectRequireImpl = true; aObjectIsTrusted = false;
        aObjectFields = []; aObjectMethods = [];
@@ -425,6 +432,9 @@ let method_side_effect mt =
   | MKnormal ->
     { affectsAbstraction = true; affectsImplementation = true;
       dependsOnAbstraction = false; invokesLogical = false }
+  | MKrefined ->
+    { affectsAbstraction = true; affectsImplementation = true;
+      dependsOnAbstraction = false; invokesLogical = false }
   | MKlogical ->
     { affectsAbstraction = true; affectsImplementation = true;
       dependsOnAbstraction = false; invokesLogical = true }
@@ -560,7 +570,7 @@ let expression_to_compile_time_constant =
     *)
   in from_big_expr
 
-let method_kind_realizing k = k = MKnormal || k = MKconst
+let method_kind_realizing k = k = MKnormal || k = MKconst || k = MKrefined
 
 let method_kind_realized_by k1 k2 =
   match k1, k2 with
@@ -585,6 +595,7 @@ let method_type_weakereq i m1 m2 =
        | MKconstghost, (MKconst | MKconstghost) -> OK
        | MKconst, MKconst -> OK
        | MKconstructor, MKconstructor -> OK
+       | MKrefined, MKrefined -> OK
        | _ -> Error ("For method " ^ i ^ ", incompatible method qualifiers \"" ^ string_of_method_kind m1.aMethodKind
                      ^ "\" and \"" ^ string_of_method_kind m2.aMethodKind ^ "\"")
 
@@ -747,6 +758,10 @@ let typecheck parsed filename =
                     ([], { aRexprDesc = AEbuiltin ("timestamp", []); aRexprType = builtin_type_a_type Tuint });
                     "block_number",
                     ([],{ aRexprDesc = AEbuiltin ("number", []); aRexprType = builtin_type_a_type Tuint });
+                    "chain_id",
+                    ([],{ aRexprDesc = AEbuiltin ("chainid", []); aRexprType = builtin_type_a_type Tuint });
+                    "self_balance",
+                    ([],{ aRexprDesc = AEbuiltin ("selfbalance", []); aRexprType = builtin_type_a_type Tuint });
                     "balance",
                     ([builtin_type_a_type Taddress],{ aRexprDesc = AEbuiltin ("balance", []); aRexprType = builtin_type_a_type Tuint });
                     "blockhash",
@@ -1433,7 +1448,7 @@ let typecheck parsed filename =
       report_error ("Normal expression expected but found an L-value") e.p_expression_loc ;
       { dummy_rexpr with aRexprType = e'.aLexprType }
     | `BigExpr e' ->
-      report_error ("Normal expression expected but found a data constructor") e.p_expression_loc;
+       report_error ("Normal expression expected but found a data constructor") e.p_expression_loc;
       { dummy_rexpr with aRexprType = e'.aBigExprType }
   and translate_lexpr var_env tmp_env e =
     match translate_expression var_env tmp_env e with
@@ -1556,7 +1571,7 @@ let typecheck parsed filename =
       | _ -> report_error ("Insufficient number of argument supplied") e.p_expression_loc; [] in
 
   let rec unfold_event_arg var_env tmp_env e = function
-    | [] -> report_error ("Internal error: argument list empty") none; []
+    | [] -> []
     | [_,t,_] -> [translate_rexpr_typed var_env tmp_env e t "Event call"]
     | (_,t,_) :: tres -> match e with
       | {p_expression_desc = PEpair (e', eres); p_expression_loc = _} ->
@@ -2108,7 +2123,7 @@ let typecheck parsed filename =
     if c'.aCmdEffect.dependsOnAbstraction && not logical_object && (kind = MKconst || kind = MKnormal) then
       report_error ("Method " ^ name ^
         " is not declared a ghost but reads ghost fields or return values from ghost primitive") meloc;
-    if c'.aCmdEffect.affectsImplementation && not logical_object && kind <> MKnormal && kind <> MKlogical && kind <> MKconstructor then
+    if c'.aCmdEffect.affectsImplementation && not logical_object && kind <> MKnormal && kind <> MKlogical && kind <> MKconstructor && kind <> MKrefined then
       report_error ("Method " ^ name ^ " is declared to be " ^
         string_of_method_kind kind ^ "but modifies the program state") meloc;
     if c'.aCmdEffect.affectsAbstraction && (kind = MKconst || kind = MKconstghost) then
@@ -2217,8 +2232,13 @@ let typecheck parsed filename =
   let translate_object_constr i c =
     let fields = List.map (translate_object_field i (c.pObjKind <> POnormal))
                           c.pObjFields in
-    let fields_to_constructorMethod = List.map (translate_object_field_to_Constructor i (c.pObjKind <> POnormal))
-                          c.pObjFields in
+    let fields_to_constructorMethod =
+      if c.pObjKind = POnormal then
+        List.map (translate_object_field_to_Constructor i (c.pObjKind <> POnormal))
+          c.pObjFields
+      else
+        []  (* Don't need constructor code for logical object fields *)
+    in
     let var_env = empty_var_env () in
     let _ = List.iter (fun f -> Hashtbl.add var_env f.aObjectFieldName
         { aLexprDesc = AEglob f.aObjectFieldName;
@@ -2285,6 +2305,7 @@ let typecheck parsed filename =
     let signature' = { signature with aSignatureMethods = method_types } in
     let t = { aObjectBase = base; aObjectSignature = signature' } in
     { aObjectName = i;
+      aObjectAddress = None;
       (*aObjectSerial = get_object_serial ();*)
       aObjectCoreType = t;
       aObjectType = t;
@@ -2305,6 +2326,27 @@ let typecheck parsed filename =
                 string_of_a_layer_signature o0'.aObjectType.aObjectBase ^ " to " ^
                   string_of_a_layer_signature layer_sig' ^ ", which is not a superset") obj.p_object_loc;
         { o0' with aObjectType = { o0'.aObjectType with aObjectBase = layer_sig' } }
+      | POclone i' -> 
+        (try 
+          (* find the original object *)
+          let origo = Hashtbl.find object_environment i' in
+          (* (if origo.aObjectAddress = None then
+            report_error ("Object " ^ i' ^ " cloned with no address attached") obj.p_object_loc
+          else ()); *)
+          (* create aliased new object *)
+          let i'' = fresh i' in
+          let no = { origo with aObjectName = i'' } in 
+          (* FIXME: we should force every cloned object to have an address instantiation *)
+          (* store new object in hashtable *)
+          Hashtbl.add object_environment i'' no;
+          (* return new object *)
+          try Hashtbl.find object_environment i''
+          with Not_found ->
+            report_error ("Object " ^ i'' ^ " not defined") obj.p_object_loc;
+            dummy_object i
+        with Not_found ->
+          report_error ("Object " ^ i' ^ " not defined") obj.p_object_loc;
+          dummy_object i )
       | POname i' ->
         try Hashtbl.find object_environment i'
         with Not_found ->
@@ -2357,16 +2399,81 @@ let typecheck parsed filename =
         aCheckedLayerDesc = ALconstr []
       }
     | (s0, o0) :: lst ->
-      let o0' = translate_object (i ^ "_" ^ s0) o0 in
+      let dsgo0 = match o0.p_object_inst_desc with 
+        | POinternal o0_in -> o0_in
+        | POexternal (_, o0_ext) -> o0_ext
+      in
+      let o0' = translate_object (i ^ "_" ^ s0) dsgo0 in
+      (* need to update o0' information with the new address *)
+      let o0_addr = match o0.p_object_inst_desc with 
+        | POinternal o0_in -> 
+          (* report_warning ("Object " ^ o0'.aObjectName ^ " is internal. ") de_loc; *)
+          None
+        | POexternal ((CONaddress addr), o0_ext) -> 
+          (* report_warning ("Object " ^ o0'.aObjectName ^ " is external. ") de_loc; *)
+          Some addr
+        | _ -> 
+          (* report_error ("Object " ^ o0'.aObjectName ^ " have bad address linking ") de_loc; *)
+          None
+      in
+      (if Hashtbl.mem object_environment o0'.aObjectName then () else 
+      report_error ("Object " ^ o0'.aObjectName ^ " does not exist. ") de_loc;
+      ());
+      let o0' = { o0' with aObjectAddress = o0_addr } in 
+      Hashtbl.replace object_environment o0'.aObjectName o0';
+      
+      (* (try 
+          let dummy = Hashtbl.find object_environment o0'.aObjectName in
+          (* store new object in hashtable *)
+          
+          ()
+        with Not_found ->
+          report_error ("Object " ^ i ^ " linked with an address but is uninstantiated. ") de_loc;
+          ()); *)
+      
       let base = o0'.aObjectType.aObjectBase in
       let lst' = (s0, o0') :: List.map (fun (s, o) ->
-        let o' = translate_object (i ^ "_" ^ s) o in
+        let dsgo' = match o.p_object_inst_desc with 
+          | POinternal o_in -> o_in
+          | POexternal (_, o_ext) -> o_ext
+        in
+        let o' = translate_object (i ^ "_" ^ s) dsgo' in
+        let o_addr = match o.p_object_inst_desc with 
+          | POinternal o_in -> 
+            (* report_warning ("Object " ^ o'.aObjectName ^ " is internal. ") de_loc; *)
+            None
+          | POexternal ((CONaddress addr), o0_ext) -> 
+            (* report_warning ("Object " ^ o'.aObjectName ^ " is external. ") de_loc; *)
+            Some addr
+          | _ -> 
+            report_error ("Object " ^ o0'.aObjectName ^ " have bad address linking ") de_loc;
+            None
+        in
+
+        let o' = { o' with aObjectAddress = o_addr } in
+        Hashtbl.replace object_environment o'.aObjectName  o';
+        (* let oid_opt = match dsgo'.p_object_desc with
+          | POname i' -> Some i'
+          (* | POclone i' -> Some i' *)
+          | _ -> None in
+        (match oid_opt with
+        | Some i -> 
+          (try 
+            let dummy = Hashtbl.find object_environment i in
+            (* store new object in hashtable *)
+            
+            ()
+          with Not_found ->
+            report_error ("Object " ^ i ^ " linked with an address but is uninstantiated. ") de_loc;
+            ())
+        | None -> ()); *)
+
         if not (object_type_equal base o'.aObjectType.aObjectBase) then
           report_error ("In layer " ^ i ^ ", slot " ^ s ^ " (object " ^
             o'.aObjectName ^ ") has different base type to slot " ^ s0 ^
-            "(object " ^ o0'.aObjectName ^ "); " ^
+            "(object " ^ o'.aObjectName ^ "); " ^
             string_of_a_layer_signature o'.aObjectType.aObjectBase ^ " vs " ^
-            string_of_a_layer_signature base) o0.p_object_loc;
+            string_of_a_layer_signature base) dsgo0.p_object_loc;
         s, o') lst in
       let object_set = IdentSet.of_list (List.map
              (fun (_, { aObjectName = name }) -> name) lst') in

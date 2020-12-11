@@ -8,6 +8,8 @@ let show_builtin0 = function
   | Bcoinbase -> "coinbase"
   | Btimestamp -> "timestamp"
   | Bnumber -> "number"
+  | Bchainid -> "chainid"
+  | Bselfbalance -> "selfbalance"
 
 let show_builtin1 = function
   | Bbalance -> "balance"
