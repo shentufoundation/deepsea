@@ -449,15 +449,28 @@ let stm_eq_dec stm stm' =
   | Stransfer -> (match stm' with
                   | Stransfer -> Coq_left
                   | _ -> Coq_right)
-  | Scallmethod (x, x0, x1) ->
+  | Scallargs (x, x0, x1) ->
     (match stm' with
-     | Scallmethod (i0, n1, n2) ->
+     | Scallargs (i0, n1, n2) ->
        (match Int.eq_dec x i0 with
         | Coq_left ->
           (match Nat.eq_dec x0 n1 with
            | Coq_left -> Nat.eq_dec x1 n2
            | Coq_right -> Coq_right)
         | Coq_right -> Coq_right)
+     | _ -> Coq_right)
+  | Scallmethod x ->
+    (match stm' with
+     | Scallmethod b0 ->
+       (match x with
+        | Coq_true ->
+          (match b0 with
+           | Coq_true -> Coq_left
+           | Coq_false -> Coq_right)
+        | Coq_false ->
+          (match b0 with
+           | Coq_true -> Coq_right
+           | Coq_false -> Coq_left))
      | _ -> Coq_right)
   | Slog (x, x0) ->
     (match stm' with

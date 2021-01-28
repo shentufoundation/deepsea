@@ -1,157 +1,109 @@
-open AST
 open Ascii
-open BinNums
-open Coqlib
 open Datatypes
 open Globalenvs
 open Maps0
 open Monad
 open OptErrMonad
 open Semantics
-open Specif
+open StmtCGraph
 open StmtClinear
 open String0
 open Trees
 
-(** val enumerate_rest : Semantics.code -> node list **)
+(** val cbasic_stm :
+    bool option -> node -> StmtCGraph.statement -> bblock **)
 
-let enumerate_rest c =
-  PTree.xkeys c Coq_xH
+let cbasic_stm ismethod nthis = function
+| Sskip n -> Coq_cons ((Sjump n), Coq_nil)
+| StmtCGraph.Smassign (lv, rv, n) ->
+  Coq_cons ((Smassign (lv, rv)), (Coq_cons ((Sjump n), Coq_nil)))
+| StmtCGraph.Ssassign (lv, rv, n) ->
+  Coq_cons ((Ssassign (lv, rv)), (Coq_cons ((Sjump n), Coq_nil)))
+| StmtCGraph.Sset (id, rv, n) ->
+  Coq_cons ((Sset (id, rv)), (Coq_cons ((Sjump n), Coq_nil)))
+| StmtCGraph.Scall (retval, lab, args, n) ->
+  Coq_cons ((Scall (retval, lab, args, nthis)), (Coq_cons ((Sjump n),
+    Coq_nil)))
+| Scond (cond, ntrue, nfalse) ->
+  Coq_cons ((Sjumpi (cond, ntrue)), (Coq_cons ((Sjump nfalse), Coq_nil)))
+| StmtCGraph.Sreturn (var, n) ->
+  Coq_cons ((Sreturn var), (Coq_cons ((Sjump n), Coq_nil)))
+| StmtCGraph.Sdone -> Coq_cons ((Sdone ismethod), Coq_nil)
+| StmtCGraph.Shash (ex1, ex2, exo, n) ->
+  Coq_cons ((Shash (ex1, ex2, exo)), (Coq_cons ((Sjump n), Coq_nil)))
+| StmtCGraph.Stransfer (a, v, nfail, n) ->
+  Coq_cons ((Stransfer (a, v, nfail)), (Coq_cons ((Sjump n), Coq_nil)))
+| StmtCGraph.Scallmethod (a, rvs, sig0, v, gas, args, nfail, n) ->
+  Coq_cons ((Scallmethod (a, rvs, sig0, v, gas, args, nfail)), (Coq_cons
+    ((Sjump n), Coq_nil)))
+| StmtCGraph.Slog (topics, args, n) ->
+  Coq_cons ((Slog (topics, args)), (Coq_cons ((Sjump n), Coq_nil)))
+| StmtCGraph.Srevert -> Coq_cons (Srevert, Coq_nil)
 
-(** val labels_of_bblock : bblock -> label list **)
+(** val cbasic_code : bool option -> StmtCGraph.code -> Semantics.code **)
 
-let rec labels_of_bblock = function
-| Coq_nil -> Coq_nil
-| Coq_cons (s, b') ->
-  (match s with
-   | Sjump n -> Coq_cons (n, (labels_of_bblock b'))
-   | Sjumpi (_, n) -> Coq_cons (n, (labels_of_bblock b'))
-   | _ -> labels_of_bblock b')
+let cbasic_code ismethod c =
+  PTree.map (cbasic_stm ismethod) c
 
-(** val enumerate'_func : (node list, Semantics.code) sigT -> node list **)
+(** val cbasic_function :
+    bool option -> StmtCGraph.coq_function -> Semantics.coq_function **)
 
-let rec enumerate'_func x =
-  let todo = projT1 x in
-  let c = projT2 x in
-  let enumerate'0 = fun todo0 c0 -> enumerate'_func (Coq_existT (todo0, c0))
-  in
-  (match todo with
-   | Coq_nil -> enumerate_rest c
-   | Coq_cons (n, ns) ->
-     let filtered_var = PTree.get n c in
-     (match filtered_var with
-      | Some b ->
-        Coq_cons (n,
-          (enumerate'0 (app (labels_of_bblock b) ns) (PTree.remove n c)))
-      | None -> enumerate'0 ns c))
+let cbasic_function ismethod f =
+  { Semantics.fn_return = f.StmtCGraph.fn_return; Semantics.fn_params =
+    f.StmtCGraph.fn_params; Semantics.fn_temps = f.StmtCGraph.fn_temps;
+    Semantics.fn_locals = f.StmtCGraph.fn_locals; Semantics.fn_code =
+    (cbasic_code ismethod f.StmtCGraph.fn_code); Semantics.fn_entrypoint =
+    f.fn_entrypoint }
 
-(** val enumerate' : node list -> Semantics.code -> node list **)
+(** val cbasic_fundef :
+    bool option -> StmtCGraph.coq_function -> Semantics.coq_function optErr **)
 
-let enumerate' todo c =
-  enumerate'_func (Coq_existT (todo, c))
+let cbasic_fundef ismethod f =
+  ret (Obj.magic coq_Monad_optErr) (cbasic_function ismethod f)
 
-(** val enumerate : Semantics.coq_function -> node list **)
+(** val cbasic_fundefs :
+    StmtCGraph.coq_function PTree.t -> Semantics.coq_function PTree.t optErr **)
 
-let enumerate f =
-  enumerate' (Coq_cons (f.fn_entrypoint, Coq_nil)) f.Semantics.fn_code
+let cbasic_fundefs t0 =
+  transl_tree (cbasic_fundef (Some Coq_false)) t0
 
-(** val starts_with : label -> code -> bool **)
+(** val cbasic_methoddefs :
+    StmtCGraph.coq_function option IntMap.t -> Semantics.coq_function option
+    IntMap.t optErr **)
 
-let starts_with lbl = function
-| Coq_nil -> Coq_false
-| Coq_cons (s, _) ->
-  (match s with
-   | Slabel lbl' -> proj_sumbool (peq lbl lbl')
-   | _ -> Coq_false)
+let cbasic_methoddefs methods =
+  transl_map (cbasic_fundef (Some Coq_true)) methods
 
-(** val add_branch : label -> code -> code **)
+(** val cbasic_constructor :
+    StmtCGraph.coq_function option -> Semantics.coq_function optErr **)
 
-let add_branch s k =
-  match starts_with s k with
-  | Coq_true -> k
-  | Coq_false -> Coq_cons ((Sjump s), k)
-
-(** val clinear_block : bblock -> code -> code **)
-
-let rec clinear_block b k =
-  match b with
-  | Coq_nil -> k
-  | Coq_cons (i, b') ->
-    (match i with
-     | Slabel _ -> clinear_block b' k
-     | Sjump n -> add_branch n k
-     | _ -> Coq_cons (i, (clinear_block b' k)))
-
-(** val clinear_node : Semantics.coq_function -> node -> code -> code **)
-
-let clinear_node f pc k =
-  match PTree.get pc f.Semantics.fn_code with
-  | Some b -> Coq_cons ((Slabel pc), (clinear_block b k))
-  | None -> k
-
-(** val clinear_body : Semantics.coq_function -> node list -> code **)
-
-let clinear_body f enum =
-  list_fold_right (clinear_node f) enum Coq_nil
-
-(** val clinear_function : Semantics.coq_function -> coq_function optErr **)
-
-let clinear_function f =
-  let enum = enumerate f in
-  ret (Obj.magic coq_Monad_optErr) { fn_return = f.Semantics.fn_return;
-    fn_params = f.Semantics.fn_params; fn_temps = f.Semantics.fn_temps;
-    fn_locals = f.Semantics.fn_locals; fn_code =
-    (add_branch f.fn_entrypoint (clinear_body f enum)) }
-
-(** val clinear_fundef : Semantics.coq_function -> coq_function optErr **)
-
-let clinear_fundef =
-  clinear_function
-
-(** val clinear_fundefs :
-    Semantics.coq_function PTree.t -> coq_function PTree.t optErr **)
-
-let clinear_fundefs t0 =
-  transl_tree clinear_fundef t0
-
-(** val clinear_methoddefs :
-    Semantics.coq_function option IntMap.t -> coq_function option IntMap.t
-    optErr **)
-
-let clinear_methoddefs methods =
-  transl_map clinear_fundef methods
-
-(** val clinear_constructor :
-    Semantics.coq_function option -> coq_function optErr **)
-
-let clinear_constructor = function
+let cbasic_constructor = function
 | Some c ->
-  bind (Obj.magic coq_Monad_optErr) (clinear_fundef c) (fun f ->
+  bind (Obj.magic coq_Monad_optErr) (cbasic_fundef None c) (fun f ->
     ret (Obj.magic coq_Monad_optErr) f)
 | None ->
   Error (String ((Ascii (Coq_true, Coq_true, Coq_false, Coq_false, Coq_false,
-    Coq_false, Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_false,
-    Coq_true, Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)), (String
-    ((Ascii (Coq_true, Coq_false, Coq_false, Coq_true, Coq_false, Coq_true,
-    Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_true, Coq_true,
-    Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii
-    (Coq_true, Coq_false, Coq_true, Coq_false, Coq_false, Coq_true, Coq_true,
-    Coq_false)), (String ((Ascii (Coq_true, Coq_false, Coq_false, Coq_false,
+    Coq_false, Coq_true, Coq_false)), (String ((Ascii (Coq_false, Coq_true,
+    Coq_false, Coq_false, Coq_false, Coq_true, Coq_true, Coq_false)), (String
+    ((Ascii (Coq_true, Coq_false, Coq_false, Coq_false, Coq_false, Coq_true,
+    Coq_true, Coq_false)), (String ((Ascii (Coq_true, Coq_true, Coq_false,
+    Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)), (String ((Ascii
+    (Coq_true, Coq_false, Coq_false, Coq_true, Coq_false, Coq_true, Coq_true,
+    Coq_false)), (String ((Ascii (Coq_true, Coq_true, Coq_false, Coq_false,
+    Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
+    Coq_true, Coq_true, Coq_true, Coq_false, Coq_true, Coq_false,
+    Coq_false)), (String ((Ascii (Coq_true, Coq_true, Coq_true, Coq_false,
+    Coq_false, Coq_false, Coq_true, Coq_false)), (String ((Ascii (Coq_true,
+    Coq_false, Coq_true, Coq_false, Coq_false, Coq_true, Coq_true,
+    Coq_false)), (String ((Ascii (Coq_false, Coq_true, Coq_true, Coq_true,
     Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
-    Coq_true, Coq_false, Coq_false, Coq_true, Coq_true, Coq_true,
-    Coq_false)), (String ((Ascii (Coq_true, Coq_true, Coq_true, Coq_true,
+    Coq_true, Coq_true, Coq_true, Coq_false, Coq_true, Coq_false,
+    Coq_false)), (String ((Ascii (Coq_false, Coq_true, Coq_true, Coq_false,
+    Coq_true, Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
+    Coq_true, Coq_false, Coq_true, Coq_true, Coq_true, Coq_false,
+    Coq_false)), (String ((Ascii (Coq_false, Coq_false, Coq_false, Coq_false,
     Coq_false, Coq_true, Coq_false, Coq_false)), (String ((Ascii (Coq_true,
-    Coq_true, Coq_true, Coq_false, Coq_false, Coq_false, Coq_true,
-    Coq_false)), (String ((Ascii (Coq_true, Coq_false, Coq_true, Coq_false,
-    Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
-    Coq_true, Coq_true, Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)),
-    (String ((Ascii (Coq_false, Coq_true, Coq_true, Coq_true, Coq_false,
-    Coq_true, Coq_false, Coq_false)), (String ((Ascii (Coq_false, Coq_true,
-    Coq_true, Coq_false, Coq_true, Coq_true, Coq_true, Coq_false)), (String
-    ((Ascii (Coq_false, Coq_true, Coq_false, Coq_true, Coq_true, Coq_true,
-    Coq_false, Coq_false)), (String ((Ascii (Coq_false, Coq_false, Coq_false,
-    Coq_false, Coq_false, Coq_true, Coq_false, Coq_false)), (String ((Ascii
-    (Coq_true, Coq_true, Coq_false, Coq_false, Coq_false, Coq_true, Coq_true,
+    Coq_true, Coq_false, Coq_false, Coq_false, Coq_true, Coq_true,
     Coq_false)), (String ((Ascii (Coq_true, Coq_true, Coq_true, Coq_true,
     Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
     Coq_true, Coq_true, Coq_true, Coq_false, Coq_true, Coq_true, Coq_false)),
@@ -182,11 +134,11 @@ let clinear_constructor = function
     Coq_false, Coq_true, Coq_true, Coq_false)), (String ((Ascii (Coq_false,
     Coq_false, Coq_true, Coq_false, Coq_false, Coq_true, Coq_true,
     Coq_false)),
-    EmptyString))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+    EmptyString))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
 
-(** val clinear_genv : Semantics.genv -> genv optErr **)
+(** val cbasic_genv : StmtCGraph.genv -> Semantics.genv optErr **)
 
-let clinear_genv ge =
+let cbasic_genv ge =
   let vars = ge.Genv.genv_vars in
   let funcs = ge.Genv.genv_funcs in
   let methods = ge.Genv.genv_methods in
@@ -194,12 +146,12 @@ let clinear_genv ge =
   let fundefs = ge.Genv.genv_fundefs in
   let methoddefs = ge.Genv.genv_methoddefs in
   let constructor = ge.Genv.genv_constructor in
-  bind (Obj.magic coq_Monad_optErr) (Obj.magic clinear_fundefs fundefs)
+  bind (Obj.magic coq_Monad_optErr) (Obj.magic cbasic_fundefs fundefs)
     (fun fundefs0 ->
     bind (Obj.magic coq_Monad_optErr)
-      (Obj.magic clinear_methoddefs methoddefs) (fun methoddefs0 ->
+      (Obj.magic cbasic_methoddefs methoddefs) (fun methoddefs0 ->
       bind (Obj.magic coq_Monad_optErr)
-        (Obj.magic clinear_constructor constructor) (fun constructor0 ->
+        (Obj.magic cbasic_constructor constructor) (fun constructor0 ->
         ret (Obj.magic coq_Monad_optErr) { Genv.genv_vars = vars;
           Genv.genv_funcs = funcs; Genv.genv_methods = methods;
           Genv.genv_defs = defs; Genv.genv_fundefs = fundefs0;

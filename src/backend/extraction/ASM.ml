@@ -183,7 +183,7 @@ let getlabel id s =
     "\"" ^ (spos id) ^ " : done \""
   | Stransfer (e1, e2, n, n') -> 
     "\"" ^ (spos id) ^ " : transfer \""
-  | StmtCGraph.Scallmethod (eil, il, i, e, el, n, n') ->
+  | StmtCGraph.Scallmethod (eil, il, i, e, eo, el, n, n') ->
     "\"" ^ (spos id) ^ " : callmethod \""
   | Slog (el1, el2, n) -> 
     "\"" ^ (spos id) ^ " : log \""
@@ -229,7 +229,7 @@ let mnemonics_cgraph cd en =
         label ^ "\n"
       | Stransfer (e1, e2, n1, n2) -> 
         label ^ "\n" ^ transitionsn n1 ^ "\n" ^ transitionsn n2
-      | Scallmethod (eil, il, i, e, el, n1, n2) ->
+      | Scallmethod (eil, il, i, e, eo, el, n1, n2) ->
         label ^ "\n" ^ transitionsn n1 ^ "\n" ^ transitionsn n2
       | Slog (el1, el2, n) -> 
         label ^ "\n" ^ transitionsn n
@@ -386,7 +386,7 @@ let assemble_inst programsize = function
   | EVM_JUMPDEST l -> "5b"
   | EVM_PUSH (n, data) ->
      (assemble_op (95 + n)) ^ data
-  | EVM_DUP n -> assemble_op (127 + n)
+  | EVM_DUP n -> (* print_endline (string_of_int n); if n > 16 then "DUP error" else *) assemble_op (127 + n)
   | EVM_SWAP n -> assemble_op (143 + n)
   | EVM_LOG n -> assemble_op (160 + n) 
   | EVM_CALL -> "f1"

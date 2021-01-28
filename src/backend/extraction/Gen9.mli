@@ -1,63 +1,35 @@
 open AST
 open Ascii
-open BinNums
-open BinPos
 open Cop
-open Ctypes
 open Datatypes
-open ExpCintptr
-open GlobalenvCompile
 open Globalenvs
-open Int0
 open Integers
-open Language0
+open Language
 open List0
+open LowValues
 open Maps0
 open Monad
-open Nat0
 open OptErrMonad
 open Options
-open PeanoNat
+open Semantics3
 open StackEnv
-open StmtCintptr
+open StmtExpressionless
 open String0
-open Structure
-open Trees
-open Values
+open Zpower
 
-val wasm_expr : nat PTree.t -> ExpCintptr.expr -> bool -> instr list optErr
+val methodical_fundefs : coq_function PTree.t -> code
 
-val wasm_exprs : nat PTree.t -> ExpCintptr.expr list -> instr list optErr
+val methodical_opt_function : coq_function option -> code
 
-val optident : nat PTree.t -> ident option -> instrs optErr
+val methodical_methods : coq_function option IntMap.t -> code
 
-val wasm_statement :
-  (positive, nat) prod list -> nat PTree.t -> coq_type -> statement -> nat ->
-  instrs optErr
+val label_method_starts_with : coq_function -> label optErr
 
-val allocate_temps : (ident, coq_type) prod list -> nat -> nat PTree.t
+val sg_val : Int.int -> coq_val
 
-val allocate_all_temps : (ident, coq_type) prod list -> nat PTree.t
+val methodical_multiplexer_body :
+  Int.int list -> coq_function option IntMap.t -> code optErr
 
-val allocate_fn_temps : coq_function -> nat PTree.t
+val methodical_main : program -> code optErr
 
-val wasm_function :
-  coq_Z PTree.t -> (positive, nat) prod list -> coq_function ->
-  Language0.coq_function optErr
-
-val wasm_constructor :
-  coq_function option -> coq_Z PTree.t -> (positive, nat) prod list ->
-  Language0.coq_function option optErr
-
-val wasm_functions :
-  coq_function PTree.t -> coq_Z PTree.t -> (positive, nat) prod list ->
-  Language0.coq_function PTree.t optErr
-
-val wasm_methoddefs :
-  coq_function option IntMap.t -> coq_Z PTree.t -> (positive, nat) prod list
-  -> Language0.coq_function option IntMap.t optErr
-
-val wasm_func_identifier :
-  (positive, 'a1) prod list -> nat -> nat -> (positive, nat) prod list
-
-val wasm_genv : genv -> Language0.genv optErr
+val methodical_genv : program -> Language.genv optErr

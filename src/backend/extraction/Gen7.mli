@@ -1,53 +1,80 @@
 open AST
 open Ascii
+open BinInt
 open BinNums
+open Cop
+open Ctypes
 open Datatypes
+open ExpCintptr
 open ExpStacked
+open FramesLabelsCintptr
 open Globalenvs
 open Integers
-open LowValues
+open List0
 open Maps0
 open MemoryModel
 open Monad
+open Nat0
 open OptErrMonad
-open Semantics2
-open StmtExpressionless
+open Options
+open Semantics1
+open StmtClinear
 open StmtStacked
 open String0
+open TempModelLow
 open Trees
 
-val expressionless_expr : expr -> StmtExpressionless.statement
+val stacked_expr :
+  nat PTree.t -> ExpCintptr.expr -> nat -> bool -> statement list optErr
 
-val pops : nat -> StmtExpressionless.statement list
+val stacked_exprs :
+  nat PTree.t -> ExpCintptr.expr list -> nat -> statement list optErr
 
-val cleanup : nat -> StmtExpressionless.statement list
+val ident_indices : nat PTree.t -> ident list -> nat -> nat list optErr
 
-val expressionless_rt : ExpStacked.ret_type -> ret_type optErr
+val set_indices : nat list -> statement list
 
-val fetch_args :
-  function_kind -> nat -> nat -> StmtExpressionless.statement list
+val load_returns : nat -> statement list
 
-val extract_lbl : typed_label -> label
+val optident : nat PTree.t -> ident option -> statement optErr
 
-val expressionless_stm :
-  statement -> function_kind -> StmtExpressionless.statement list optErr
+val return_type : StmtClinear.coq_function -> coq_type
 
-val expressionless_code :
-  code -> function_kind -> StmtExpressionless.code optErr
+val toreturn : StmtClinear.coq_function -> bool option -> ret_type
 
-val expressionless_function :
-  function_kind -> coq_function -> StmtExpressionless.coq_function optErr
+val zero_stm : statement
 
-val expressionless_fundefs :
-  coq_function PTree.t -> StmtExpressionless.coq_function PTree.t optErr
+val xzero_stms : nat -> statement list
 
-val expressionless_methods :
-  coq_function option IntMap.t -> StmtExpressionless.coq_function option
+val zero_stms : nat -> statement list
+
+val z_stm : coq_Z -> statement
+
+val stacked_code :
+  nat PTree.t -> StmtClinear.coq_function -> StmtClinear.code -> code optErr
+
+val allocate_temps : (ident, coq_type) prod list -> nat -> nat PTree.t
+
+val allocate_all_temps : (ident, coq_type) prod list -> nat PTree.t
+
+val allocate_fn_temps : StmtClinear.coq_function -> nat PTree.t
+
+val stacked_function :
+  StmtClinear.coq_function -> StmtStacked.coq_function optErr
+
+val stacked_fundef :
+  StmtClinear.coq_function -> StmtStacked.coq_function optErr
+
+val stacked_fundefs :
+  StmtClinear.coq_function PTree.t -> StmtStacked.coq_function PTree.t optErr
+
+val stacked_methods :
+  StmtClinear.coq_function option IntMap.t -> StmtStacked.coq_function option
   IntMap.t optErr
 
-val expressionless_constructor :
-  coq_function option -> StmtExpressionless.coq_function optErr
+val stacked_constructor :
+  StmtClinear.coq_function option -> StmtStacked.coq_function optErr
 
-val expressionless_genv : genv -> StmtExpressionless.genv optErr
+val stacked_genv : StmtClinear.genv -> genv optErr
 
-val expressionless_program : program -> StmtExpressionless.program optErr
+val stacked_program : StmtClinear.program -> program optErr
