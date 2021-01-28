@@ -2,24 +2,22 @@
    - implement withdrawals
  *)
 
-type addr := uint
-
 object signature AuctionInterface = {
   initialize  : uint -> unit;
-  getbid      : unit -> uint;
-  getbidder   : unit -> addr;
-  getchair    : unit -> addr;
-  getdeadline : unit -> uint;
+  const getbid      : unit -> uint;
+  const getbidder   : unit -> address;
+  const getchair    : unit -> address;
+  const getdeadline : unit -> uint;
   bid         : unit -> bool;
 }
 
 object OpenAuction : AuctionInterface {
   (* initial values don't get used *)
   let _bid        : uint := 0u0
-  let _bidder     : addr := 0u0
-  let _chair      : addr := 0u0
+  let _bidder     : address := address(0)
+  let _chair      : address := address(0)
   let _deadline   : uint := 0u0
-  let withdrawals : mapping[addr] uint := mapping_init
+  let withdrawals : mapping[address] uint := mapping_init
 
   (* placeholder for constructor *)
   let initialize deadline =

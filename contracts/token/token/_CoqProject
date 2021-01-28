@@ -1,0 +1,11 @@
+-R ../../.. DeepSpec
+-R . token
+EdsgerIdents.v
+DataTypeOps.v
+DataTypeProofs.v
+DataTypes.v
+LayerFIXEDSUPPLYTOKEN.v
+RefineFIXEDSUPPLYTOKEN.v
+ObjFixedSupplyTokenCodeProofs.v
+FunctionalCorrectness.v
+Invariant.v  

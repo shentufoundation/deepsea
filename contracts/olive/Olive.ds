@@ -133,10 +133,6 @@ layer LOCKABLE : [{ ownable : OwnableInterface }]
 
 (* we cannot have "to" which is a token that could cause parse error; need to mention in reference *)
 
-type Wrapper = { 
-  val: mapping[address] uint
-}
-
 object signature ERC20Interface = {
   constructor : unit -> unit;
   const balanceOf : address -> uint;
@@ -151,9 +147,8 @@ object signature ERC20Interface = {
 
 object Token (pausable : PausableInterface, ownable : OwnableInterface, lockable : LockableInterface) : ERC20Interface {
   let _totalSupply : uint := 0u10000000000
-  let wrapper : Wrapper := { val = mapping_init }
   let _balances : mapping[address] uint := mapping_init
-  let _allowed : mapping [address] Wrapper := mapping_init
+  let _allowed : mapping[address] mapping[address] uint := mapping_init
 
   let constructor () =
     let a = _totalSupply in
@@ -179,7 +174,7 @@ object Token (pausable : PausableInterface, ownable : OwnableInterface, lockable
     true
 
   let allowance (owner, spender)  =
-     let res = _allowed[owner].val[spender] in
+     let res = _allowed[owner][spender] in
       res
 
   let transferFrom (from_, to_, value, now) = 
@@ -187,7 +182,7 @@ object Token (pausable : PausableInterface, ownable : OwnableInterface, lockable
     assert(check <> false);
     pausable.whenNotPaused();
     let from_bal = _balances[from_] in
-      let from_allow = _allowed[from_].val[msg_sender] in
+      let from_allow = _allowed[from_][msg_sender] in
         let to_bal = _balances[to_] in
     assert(to_ <> address(0));
     assert(value <= from_bal);
@@ -195,13 +190,13 @@ object Token (pausable : PausableInterface, ownable : OwnableInterface, lockable
     _balances[from_] := from_bal - value;
     (* todo: overflow check for the addition. *)
     _balances[to_] := to_bal + value;
-    _allowed[from_].val[msg_sender] := from_allow- (value);
+    _allowed[from_][msg_sender] := from_allow- (value);
     emit Transfer(from_, to_, value);
     true
 
   let approve (spender, value) =
      (* pausable.whenNotPaused(); *)
-     _allowed[msg_sender].val[spender] := value;
+     _allowed[msg_sender][spender] := value;
      emit Approval(msg_sender, spender, value);
      true
 
@@ -209,22 +204,22 @@ object Token (pausable : PausableInterface, ownable : OwnableInterface, lockable
   let increaseApproval(spender, addedValue) =
     pausable.whenNotPaused();
     (* todo: overflow check *)
-    let allowmsgsender = _allowed[msg_sender].val[spender] in
-    _allowed[msg_sender].val[spender] := allowmsgsender + addedValue;
+    let allowmsgsender = _allowed[msg_sender][spender] in
+    _allowed[msg_sender][spender] := allowmsgsender + addedValue;
     emit Approval(msg_sender, spender, allowmsgsender);
     true
 
   let decreaseApproval (_spender, _subtractedValue) =
     pausable.whenNotPaused();
-    let oldValue = _allowed[msg_sender].val[_spender] in
+    let oldValue = _allowed[msg_sender][_spender] in
     if (_subtractedValue > oldValue) then begin
-      _allowed[msg_sender].val[_spender] := 0u0;
-      let a = _allowed[msg_sender].val[_spender] in
+      _allowed[msg_sender][_spender] := 0u0;
+      let a = _allowed[msg_sender][_spender] in
       emit Approval(msg_sender, _spender, a);
       true
     end else begin
-      _allowed[msg_sender].val[_spender] := oldValue - _subtractedValue;
-      let b = _allowed[msg_sender].val[_spender] in
+      _allowed[msg_sender][_spender] := oldValue - _subtractedValue;
+      let b = _allowed[msg_sender][_spender] in
       emit Approval(msg_sender, _spender, b);
       true
     end
