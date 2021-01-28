@@ -1,0 +1,11 @@
+(library
+  (name minic)
+  (libraries backend core)
+)
+
+(ocamllex lexer)
+
+(menhir
+  (modules parser)
+  (flags --unused-precedence-levels)
+)

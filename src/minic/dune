@@ -1,0 +1,6 @@
+(executable
+ (name minicc)
+ (modes byte exe)
+ (libraries minic)
+; (preprocess (action (run %{bin:cppo} -V OCAML:%{ocaml_version} %{input-file})))
+)
