@@ -264,7 +264,7 @@ let parse_constr_annotations ctype_env annos =
       if e1'.aImplType = ACtint && e2'.aImplType = ACtint
         then { aImplDesc = ACtimes (e1', e2'); aImplType = ACtint }
         else raise UnsupportedConstrAnnotation
-    | PEapp ({p_expression_desc = (PEglob "array_init"); p_expression_loc = _}, [e]) -> (* PEglob "array_init"  *)
+    | PEapp ({p_expression_desc = (PEglob "array_init"); p_expression_loc = _} :: [e]) -> (* PEglob "array_init"  *)
       let e' = parse_expression e in
       { aImplDesc = ACarray e'; aImplType = ACtarray (0, e'.aImplType) }
     | PEstruct lst ->
@@ -768,6 +768,15 @@ let typecheck parsed filename =
                     ([builtin_type_a_type Tuint],{ aRexprDesc = AEbuiltin ("blockhash", []); aRexprType = builtin_type_a_type Tuint });
           
                   ] in
+
+  let get_field_ident e loc = match e with
+    | hd::_ -> (match hd with
+      | { p_expression_desc = PEglob s'; p_expression_loc = _ } -> s'
+      | _ -> report_error ("First atom of field must be ident")
+        loc; ""
+      )
+    | [] -> report_error ("Unreachable: empty atom list should not be possible")
+      loc; "" in
   
   let get_type i loc =
     try Hashtbl.find type_environment i
@@ -1202,7 +1211,7 @@ let typecheck parsed filename =
         aBigExprType = t
       }
 
-    | PEapp ({p_expression_desc = (PEglob "keccak256"); p_expression_loc = _ }, [{p_expression_desc = PEpair (e1, e2); p_expression_loc = _ }]) ->
+    | PEapp ({p_expression_desc = (PEglob "keccak256"); p_expression_loc = _ } :: [{p_expression_desc = PEpair (e1, e2); p_expression_loc = _ }]) ->
       let e1' = translate_rexpr var_env tmp_env e1 in
       let e2' = translate_rexpr var_env tmp_env e2 in
       begin match binop_type OPsha_2 e1'.aRexprType e2'.aRexprType with
@@ -1213,7 +1222,7 @@ let typecheck parsed filename =
         `RExpr { aRexprDesc = AEbinop (OPsha_2, e1', e2'); aRexprType = dummy_type "*BINOP*" }
       end
 
-    | PEapp ({p_expression_desc = (PEglob "keccak256"); p_expression_loc = _}, [e]) ->
+    | PEapp ({p_expression_desc = (PEglob "keccak256"); p_expression_loc = _} :: [e]) ->
       let e' = translate_rexpr var_env tmp_env e in
       begin match unop_type OPsha_1 e'.aRexprType with
       | Some t -> `RExpr { aRexprDesc = AEunop (OPsha_1, e'); aRexprType = t }
@@ -1223,7 +1232,7 @@ let typecheck parsed filename =
         `RExpr { aRexprDesc = AEunop (OPsha_1, e'); aRexprType = dummy_type "*UNOP*" }
       end
 
-    | PEapp ({p_expression_desc = (PEglob i); p_expression_loc = _}, es) when i = "fst" || i = "snd" -> begin
+    | PEapp ({p_expression_desc = (PEglob i); p_expression_loc = _} :: es) when i = "fst" || i = "snd" -> begin
       match es with
       | [] | _ :: _ :: _ ->
         report_error (i ^ " only takes one argument; " ^
@@ -1243,7 +1252,7 @@ let typecheck parsed filename =
       end
 
     (* TODO: *)
-    | PEapp ({p_expression_desc = (PEglob i); p_expression_loc = _}, es) when i = "array_sets" -> begin
+    | PEapp ({p_expression_desc = (PEglob i); p_expression_loc = _} :: es) when i = "array_sets" -> begin
         let ct = begin match es with
         | e::_ -> 
           let e' = translate_big_expr var_env tmp_env e in
@@ -1269,7 +1278,7 @@ let typecheck parsed filename =
         in `BigExpr { aBigExprDesc = AEconstr (c, params); aBigExprType = t }
     end
 
-    | PEapp ({p_expression_desc = (PEglob i); p_expression_loc = _}, es) ->
+    | PEapp ({p_expression_desc = (PEglob i); p_expression_loc = _} :: es) ->
        begin
        match Hashtbl.find_opt ethbuiltins_environment i with
        | Some (argtypes, {aRexprDesc=AEbuiltin (bi,_); aRexprType=rt})  ->
@@ -1397,8 +1406,10 @@ let typecheck parsed filename =
                 `BigExpr dummy_big_expr
       end
 
-    | PEfield (e, f) ->
+    | PEfield (a1, a2) ->
+      let e = List.hd a1 in
       let e' = translate_lexpr var_env tmp_env e in
+      let f = get_field_ident a2 e.p_expression_loc in
       begin match e'.aLexprType.aTypeDesc with
       | ATdata (i, ATsingleton c) ->
         begin match catch_not_found (List.assoc f) c.aTypeConstrArgs with
@@ -1626,11 +1637,34 @@ let typecheck parsed filename =
       next_id'
     in match cmd.p_command_desc with
       (* | PCskip -> ACskip, tvoid_unit, next_id *)
-      | PCyield ({p_expression_desc = PEapp ({p_expression_desc = (PEfield ({p_expression_desc = (PEglob s); p_expression_loc = _}, m)); p_expression_loc = _ }, arg :: rest); p_expression_loc = _ }) ->
-        if rest <> [] then
-          report_warning ("More than one (currying) argument for primitive call " ^
-            s ^ "." ^ m ^ ": ignored") cmd.p_command_loc;
-        begin match find_method env s m with  
+      | PCyield ({
+          p_expression_desc = PEfield (a1, a2);
+          p_expression_loc = _
+        }) when (List.length a2 <> 1) (* only process method calls, not struct access *) ->
+        let s1 = get_field_ident a1 cmd.p_command_loc in (* contract/layer name *)
+        let s2 = get_field_ident a2 cmd.p_command_loc in (* method name *)
+        let value, gas = ( (* Both optional. If `value` is given, `gas` must be too. *)
+          let invalid () = report_error "Invalid value/gas arguments" cmd.p_command_loc; None, None in
+          match List.length a1 with
+          | 1 -> None, None
+          | 2 -> (let e = List.nth a1 1 in
+              match e.p_expression_desc with
+              | PEglob v -> Some e, None
+              | PEpair (v, g) -> (
+                match v.p_expression_desc, g.p_expression_desc with
+                  | PEglob _, PEglob _ -> Some v, Some g
+                  | _ -> invalid ()
+                )
+              | _ -> invalid ()
+            )
+          | _ -> report_error "More than two atoms in field" cmd.p_command_loc; None, None
+        )
+        in
+        let translate_option = function
+        | None -> None
+        | Some v -> Some (translate_rexpr env.variable_env tmp_env v) in
+        let value', gas' = translate_option value, translate_option gas in
+        begin match find_method env s1 s2 with  
         | `Not_found msg ->
           report_error msg cmd.p_command_loc; return next_id tvoid_unit side_effect_pure ACskip
         | `Found mt ->
@@ -1639,8 +1673,11 @@ let typecheck parsed filename =
               report_error ("Method call in constructor is not working in current version of compiler") cmd.p_command_loc;
               end;
           return next_id mt.aMethodReturnType (method_side_effect mt) @@
-            ACcall (s, m, unfold_call_arg env.variable_env tmp_env
-                                               arg mt.aMethodArgumentTypes)
+            ACcall (s1, s2, unfold_call_arg env.variable_env tmp_env
+              (* TODO: catch n too large *)
+              (* TODO: check that s1 and s2 don't have any extra atoms *)
+              (List.nth a2 1) mt.aMethodArgumentTypes, 
+              value', gas') 
         end
 
       | PCyield ({p_expression_desc = (PEglob v); p_expression_loc = _})
@@ -1659,8 +1696,8 @@ let typecheck parsed filename =
         return next_id res_t { eff with invokesLogical = true } @@
           ACexternal (dest, s, i, [])
 
-      | PCyield ({p_expression_desc = PEapp ({p_expression_desc =  (PEglob f); p_expression_loc = _ }, arg :: rest); p_expression_loc = _})
-      | PCstore (_, {p_expression_desc = PEapp ({p_expression_desc = (PEglob f); p_expression_loc = _ }, arg :: rest); p_expression_loc = _ })
+      | PCyield ({p_expression_desc = PEapp ({p_expression_desc =  (PEglob f); p_expression_loc = _ } :: (arg :: rest)); p_expression_loc = _})
+      | PCstore (_, {p_expression_desc = PEapp ({p_expression_desc = (PEglob f); p_expression_loc = _ } :: (arg :: rest)); p_expression_loc = _ })
           when Hashtbl.mem external_function_environment f ->
         let (s, mt) = Hashtbl.find external_function_environment f in
         let dest, res_t, eff = match cmd.p_command_desc with
@@ -1855,7 +1892,7 @@ let typecheck parsed filename =
           in return next_id tvoid_unit eff @@ ACconstr (el', er'')
         end
 
-      | PCemit ({p_expression_desc = PEapp ({p_expression_desc = (PEglob f); p_expression_loc = _ }, args :: rest); p_expression_loc = _}) -> begin
+      | PCemit ({p_expression_desc = PEapp ({p_expression_desc = (PEglob f); p_expression_loc = _ } :: (args :: rest)); p_expression_loc = _}) -> begin
         if rest <> [] then
           report_warning ("More than one (currying) argument for event " ^
             f ^": ignored") cmd.p_command_loc;

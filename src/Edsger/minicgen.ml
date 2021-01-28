@@ -3,6 +3,7 @@ open Astcommon
 open Abi
 
 open Backend
+  open BinNumsExt
   open StmtMiniC
   open ExpMiniC
   module D = Datatypes
@@ -608,18 +609,53 @@ and gen_cmd underlay obj pure c dest =
   | ACsequence (c1, c2) ->
      Ssequence (gen_cmd underlay obj pure c1 dest,
 		gen_cmd underlay obj pure c2 dest)
-  | ACcall (s, f, es) ->
-     let retval_dest = begin match c.aCmdType.aTypeCtype with
-			     | ACtvoid -> Backend.Datatypes.None
-			     | _ -> Backend.Datatypes.Some (positive_of_int dest)
-		       end in
-     let args = begin match es with
-		      | [e] when e.aRexprType.aTypeDesc = ATbuiltin Tunit -> []
-		      | _ -> List.map gen_rexpr es
-		end in
-     Scall (retval_dest,
-	    backend_ident_of_primitive underlay s f,
-	    coqlist_of_list args)     
+  | ACcall (s, f, es, v, g) ->
+    let o = (match underlay with
+      | ALontop l -> (try Some (List.assoc s l.aLayerAllObjects)
+          with Not_found -> None)
+      | _ -> None)
+    in
+    let retval_dest = begin match c.aCmdType.aTypeCtype with
+    | ACtvoid -> Backend.Datatypes.None
+    | _ -> Backend.Datatypes.Some (positive_of_int dest)
+    end in
+    let args = begin match es with
+    | [e] when e.aRexprType.aTypeDesc = ATbuiltin Tunit -> []
+    | _ -> List.map gen_rexpr es
+    end in
+    let address_signature = (match o with
+    | None -> None
+    | Some o' ->
+        let methd = List.find (fun i -> i.aMethodName = f) o'.aObjectMethods in
+        let signature = coq_Z_of_int (function_selector_intval_of_method methd) in
+        match o'.aObjectAddress with
+        | None -> None
+        | Some address -> Some (address, signature)
+    ) in
+    (match address_signature with
+    | None -> if Option.is_some v || Option.is_some g then 
+      raise (Failure "Value/gas specified for interal method call") else
+      Scall (retval_dest,
+      backend_ident_of_primitive underlay s f,
+      coqlist_of_list args)
+    | Some (address, signature) ->
+      let v' = (match v with
+        | None -> Econst_int256 (coq_Z_of_int 0, Tint (I256, Unsigned))
+        | Some v'' -> gen_rexpr v''
+      ) in
+      let g' = (match g with
+        | None -> D.None
+        | Some g'' -> D.Some (gen_rexpr g'')
+      ) in
+      Scallmethod (
+        Econst_int256 (coq_Z_of_Z (Z.of_string address), Tint (I256, Unsigned)),
+        coqlist_of_list (match retval_dest with None -> [] | Some r -> [r]), (* only one return value allowed for now *)
+        signature, (* method siguature *)
+        v',
+        g',
+        coqlist_of_list args
+      )
+    )
   | ACcond (e, c_then, c_else) ->
      Sifthenelse (gen_rexpr e,
 		  gen_cmd underlay obj pure c_then dest,
@@ -857,7 +893,7 @@ let rec string_of_statement = function
   | Sreturn None -> "Sreturn None"
   | Sreturn (Some id) -> ("Sreturn Some("^string_of_int (int_of_positive id)^")")		      
   | Stransfer (e1,e2) -> "Stransfer ("^string_of_expr e1 ^","^ string_of_expr e2 ^")"
-  | Scallmethod (e1,ids,z,e,es) -> "Scallmethod TODO"
+  | Scallmethod (e1,ids,z,e,eo,es) -> "Scallmethod TODO"
   | Slog _ -> "Slog TODO" 
   | Srevert -> "Srevert"
 
@@ -920,7 +956,7 @@ let rec gen_cmd_locals c dest =
      (n, c1.aCmdType.aTypeCtype) :: gen_cmd_locals c1 n @ gen_cmd_locals c2 dest
   | ACsequence (c1, c2) ->
      gen_cmd_locals c1 dest @ gen_cmd_locals c2 dest
-  | ACcall (s, f, es) -> []
+  | ACcall (s, f, es, _, _) -> []
   | ACcond (e, c1, c2) ->
      gen_cmd_locals c1 dest @ gen_cmd_locals c2 dest
   | ACfor (n_iter, i, e1, n_end, e2, c, None) ->
