@@ -2,7 +2,7 @@
   (name edsger)
   (modes byte exe)
   ; The line below is a hack to build a MacOS binary without libgmp.so.
-  (link_flags (-cclib -Wl,/usr/local/lib/libgmp.a))
+  ; (link_flags (-cclib -Wl,/usr/local/lib/libgmp.a))
   (libraries backend cryptokit yojson extlib str)
   (preprocessor_deps config.h)
   (preprocess (action (run %{bin:cppo} -n -V OCAML:%{ocaml_version} %{input-file})))

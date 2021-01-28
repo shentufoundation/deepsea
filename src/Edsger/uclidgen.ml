@@ -232,7 +232,7 @@ let rec str_cmd_uclid acmd base_layer o idnt =
       idnt ^ str_cmd_uclid c2' base_layer o (idnt ^ "  ") ^ "\n" ^
       idnt ^ "  " ^ x ^ " = ;\n" ^ 
       idnt ^ "}\n"
-    | ACcall (s, f, es) -> 
+    | ACcall (s, f, es, _, _) -> 
       (match o.aObjectAddress with
       | Some addr -> 
         let o' = try (List.assoc s base_layer.aLayerAllObjects)
@@ -261,7 +261,7 @@ let rec str_cmd_uclid acmd base_layer o idnt =
   | ACsequence (c1, c2) -> 
     str_cmd_uclid c1 base_layer o idnt ^
     str_cmd_uclid c2 base_layer o idnt
-  | ACcall (s, f, es) -> 
+    | ACcall (s, f, es, _, _) -> 
     (match o.aObjectAddress with
     | Some addr -> 
       let o' = try (List.assoc s base_layer.aLayerAllObjects)
@@ -344,7 +344,7 @@ let rec get_modified_uclid acmd base_layer o modified =
     SS.union (get_modified_uclid c1 base_layer o modified) (get_modified_uclid c2 base_layer o modified)
   | ACsequence (c1, c2) -> 
     SS.union (get_modified_uclid c1 base_layer o modified) (get_modified_uclid c2 base_layer o modified)
-  | ACcall (s, f, es) -> 
+  | ACcall (s, f, es, _, _) -> 
     let o' = try (List.assoc s base_layer.aLayerAllObjects)
             with Not_found -> raise (PrimitiveNotFound s) in
     get_modified_uclid (List.find (fun m -> m.aMethodName = f) o'.aObjectMethods).aMethodBody base_layer o' modified
@@ -402,7 +402,7 @@ let rec get_vardecl_uclid acmd base_layer o modified =
     SS.union (get_vardecl_uclid c1 base_layer o mod') (get_vardecl_uclid c2 base_layer o mod')
   | ACsequence (c1, c2) -> 
     SS.union (get_vardecl_uclid c1 base_layer o modified) (get_vardecl_uclid c2 base_layer o modified)
-  | ACcall (s, f, es) -> 
+  | ACcall (s, f, es, _, _) -> 
     modified
   | ACcond (e, c1, c2) -> 
     SS.union (get_vardecl_uclid c1 base_layer o modified) (get_vardecl_uclid c2 base_layer o modified)

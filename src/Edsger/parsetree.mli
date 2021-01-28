@@ -20,9 +20,9 @@ and p_expression_desc =
   | PEun of Astcommon.unop * p_expression
   | PEbin of Astcommon.binop * p_expression * p_expression
   | PEpair of p_expression * p_expression
-  | PEapp of p_expression * p_expression list
+  | PEapp of p_expression list
   | PEstruct of (Astcommon.ident * p_expression) list
-  | PEfield of p_expression * Astcommon.ident
+  | PEfield of p_expression list * p_expression list
   | PEindex of p_expression * p_expression
 
 

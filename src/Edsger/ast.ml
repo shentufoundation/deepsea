@@ -211,7 +211,8 @@ and a_command_desc =
   | ACyield of a_rexpr
   | AClet of tmp_id_t * ident * a_command * a_command
   | ACsequence of a_command * a_command
-  | ACcall of ident * ident * a_rexpr list
+  (* ACcall: layer signature name * method name * args * value* gas*)
+  | ACcall of ident * ident * a_rexpr list * a_rexpr option * a_rexpr option
   | ACcond of a_rexpr * a_command * a_command
   | ACfor of tmp_id_t * ident * a_rexpr * tmp_id_t * a_rexpr * a_command
       (* FOR (*NUM*)    i     = 0      TO (*HOLDER*) n      DO s.run i *)
@@ -595,7 +596,7 @@ let rec string_of_a_command c = match c.aCmdDesc with
     "\nin " ^ string_of_a_command c2
   | ACsequence (c1, c2) -> string_of_a_command c1 ^ ";\n" ^
                            string_of_a_command c2
-  | ACcall (s, f, es) -> "call " ^ s ^ "." ^ f ^ " (" ^
+  | ACcall (s, f, es, _, _) -> "call " ^ s ^ "." ^ f ^ " (" ^
     String.concat ", " (List.map string_of_a_rexpr es) ^ ")"
   | ACcond (e, c1, c2) -> "if " ^ string_of_a_rexpr e ^
                           "\n  then " ^ string_of_a_command c1 ^
