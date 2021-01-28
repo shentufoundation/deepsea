@@ -4,43 +4,49 @@
 # tests. Deepsea files are first prett-printed to minic source. Then, all minic
 # files are parsed and printed twice and checked for any differences.
 
-set -e
+minicc=../binaries/MacOS/minicc
+dsc=../binaries/MacOS/dsc
 
-root=$(git rev-parse --show-toplevel)
-test_dir=$root/minic/tests
-minicc=$root/minicc.bc
+skip_files="token_ant.ds"
+
 deepsea_compiled=$(mktemp -d)
+tmp1=$(mktemp)
+tmp2=$(mktemp)
 
-skip_files="swaps_threeway.ds swaps_general.ds spblind.ds fpblind.ds defi.ds"
+on_exit () {
+	echo -e '\nCleaning up...'
+	rm -r "$deepsea_compiled"
+	rm $tmp1 $tmp2
+	echo $pass_count passed, $fail_count failed
+}
+trap on_exit EXIT
 
-for deepsea in $(find -L $test_dir -name '*.ds'); do
-	bname=$(basename $deepsea)
+for f in ./unittests/*.ds ./contracts/*/*.ds; do
+	bname=$(basename $f)
 	if echo $skip_files | grep -q -w $bname; then
 		continue
 	fi
 	echo Compiling $bname
 
-	$root/edsger.bc $deepsea minic > $deepsea_compiled/${bname%.*}.mc
-	# $root/edsger.bc $deepsea bytecode > $deepsea_compiled/${bname%.*}.bc
+	$dsc $f minic > $deepsea_compiled/${bname%.*}.mc
 done
 
 echo -e '\nRunning tests'
 
-for mc in $test_dir/*.mc $deepsea_compiled/*; do
-	echo $(basename $mc)
-	tmp1=$(mktemp)
-	tmp2=$(mktemp)
-	trap "diff -u $tmp1 $tmp2 | diff-so-fancy" ERR
+fail_count=0
+pass_count=0
+
+for mc in ./*.mc $deepsea_compiled/*; do
+	echo -n $(basename $mc)
 
 	$minicc $mc > $tmp1
 	$minicc $tmp1 > $tmp2
-	diff -u $tmp1 $tmp2 | diff-so-fancy
 
-
-	# $minicc $mc bytecode > $tmp1
-	# diff -u ${mc%.*}.bc $tmp1 | diff-so-fancy
-
-	rm $tmp1 $tmp2
+	if diff -u $tmp1 $tmp2; then
+		echo
+		((pass_count++))
+	else
+		echo : FAIL
+		((fail_count++))
+	fi
 done
-
-rm -r $deepsea_compiled
