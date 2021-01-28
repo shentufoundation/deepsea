@@ -1,0 +1,83 @@
+object signature FixedERC20Interface = {
+  const getNum : unit -> int;
+  doubleNum : unit -> unit;
+  const sum : int * int -> int;
+}
+
+object FixedSupplyToken : FixedERC20Interface {
+  let myNum : int := 5
+
+  let getNum () =
+    let num = myNum in
+    num
+
+  let doubleNum () =
+    let num = myNum in
+    myNum := num * 2;
+    ()
+
+	let sum (num1, num2) =
+		let ret = (2 * num1) + num2 in
+		ret
+}
+
+object signature AMMInterface = {
+  call_double : unit -> unit;
+  const call_get : unit -> int;
+  const call_sum : int * int -> int;
+  const stress_call : int * int -> int;
+}
+
+object AutomatedMarketMaker (erc20Token0: FixedERC20Interface) : AMMInterface {
+  let call_double () =
+    erc20Token0.doubleNum()
+
+  let call_get () =
+    let ret = erc20Token0.getNum() in
+    ret
+
+	let call_sum (num1, num2) =
+		let ret = erc20Token0.sum(num1, num2) in
+		ret
+
+	let stress_call (num1, num2) =
+		let temp1 = 1 in
+		let temp2 = 2 in
+		let temp3 = 3 in
+		let temp4 = 4 in
+		let temp5 = 5 in
+		(*let temp6 = 6 in (* breaks down *)
+		let temp7 = 7 in
+		let temp8 = 8 in
+		let temp9 = 9 in
+		let temp10 = 10 in
+		let temp11 = 11 in
+		let temp12 = 12 in
+		let temp13 = 13 in
+		let temp14 = 14 in
+		let temp15 = 15 in
+		let temp16 = 16 in
+		let temp16 = 16 in*)
+		let ret = erc20Token0.sum(num1, num2) in
+		ret
+}
+
+(* CUT *)
+
+layer signature AMMLibSig = {
+  erc20Token0 : FixedERC20Interface;
+}
+
+layer AMMLIB : [{}] AMMLibSig = {
+  erc20Token0 = address(0x10033) <: FixedSupplyToken;
+}
+
+layer signature AMMSig = {
+  amm : AMMInterface
+}
+
+layer AMM : [AMMLibSig] AMMSig = {
+  amm = address(0x10030) <: AutomatedMarketMaker
+}
+
+layer COMPLETE = AMM @ AMMLIB

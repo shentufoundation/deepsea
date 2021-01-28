@@ -1,0 +1,404 @@
+(* TODO: add emit Events *)
+
+(* PROOFS:
+   1. change re-defined layers
+   2. balance tracks reserve
+   3. increasing k -> algebra
+   4. no path independence, splitting trades is strictly more expensive -> algebra, appendix D
+   5. liquidity token economics is right, i.e., UNI-V2 tracks the actual share of pool --> actually, where is the trading of UNI-V2 Pair tokens? What is its value?
+   6. MOD: slippage control
+   7. ... cost of manipulation (hard)
+*)
+
+object signature ERC20Interface = {
+  constructor : unit -> unit;
+  mint : address * int -> unit;
+  burn : address * int -> unit;
+  totalSupply : unit -> int;
+  balanceOf : address -> int;
+  transfer : address * int -> bool;
+  approve : address * int -> bool;
+  transferFrom : address * address * int -> bool
+}
+
+object LiquidityToken : ERC20Interface {
+  let _totalSupply : int := 0
+  let balances : mapping[address] int := mapping_init
+  let allowances : mapping[address] mapping[address] int := mapping_init
+
+  let constructor () =
+    balances[msg_sender] := 100000
+
+  let mint (toA, value) =
+    let totalSupply = _totalSupply in
+    _totalSupply := totalSupply + value;
+    let to_bal = balances[toA] in
+    balances[toA] := to_bal + value
+
+  let burn (fromA, value) =
+    let totalSupply = _totalSupply in
+    _totalSupply := totalSupply - value;
+    let from_bal = balances[fromA] in
+    balances[fromA] := from_bal - value
+
+  let totalSupply () =
+    let bal0 = balances[address(0x0)] in
+    let totalSupply = _totalSupply in
+    let resultU = totalSupply - bal0 in
+    resultU
+
+  let balanceOf tokenOwner =
+    let bal = balances[tokenOwner] in
+    let resultU = bal in
+    resultU
+
+  let transfer(toA, tokens) =
+    let fromA = msg_sender in
+    let from_bal = balances[fromA] in
+    let to_bal   = balances[toA] in
+    assert (fromA <> toA /\ from_bal >= tokens);
+    balances[fromA] := from_bal-tokens;
+    balances[toA] := to_bal+tokens;
+    let resultU = true in
+    resultU
+
+  let approve (spender, tokens) =
+    allowances[msg_sender][spender] := tokens;
+    let resultU = true in
+    resultU
+
+  let transferFrom (fromA, toA, tokens) =
+    let from_bal = balances[fromA] in
+    let to_bal   = balances[toA] in
+    let allowed = allowances[fromA][toA] in
+    assert (fromA <> toA /\ from_bal >= tokens /\ allowed >= tokens);
+    balances[fromA] := from_bal-tokens;
+    balances[toA] := to_bal+tokens;
+    let resultU = true in
+    resultU
+}
+
+object signature FixedERC20Interface = {
+  constructor : unit -> unit;
+  const totalSupply : unit -> int;
+  const balanceOf : address -> int;
+  transfer : address * int -> bool;
+  approve : address * int -> bool;
+  transferFrom : address * address * int -> bool
+}
+
+object FixedSupplyToken : FixedERC20Interface {
+  let _totalSupply : int := 100000
+  let balances : mapping[address] int := mapping_init
+  let allowances : mapping[address] mapping[address] int := mapping_init
+
+  let constructor () =
+    _totalSupply := 100000;
+    balances[msg_sender] := 100000
+
+  let totalSupply () =
+    let bal0 = balances[address(0x0)] in
+    let totalSupply = _totalSupply in
+    let resultU = totalSupply - bal0 in
+    resultU
+
+  let balanceOf tokenOwner =
+    let bal = balances[tokenOwner] in
+    let resultU = bal in
+    resultU
+
+  let transfer(toA, tokens) =
+    let fromA = msg_sender in
+    let from_bal = balances[fromA] in
+    let to_bal   = balances[toA] in
+    assert (fromA <> toA /\ from_bal >= tokens);
+    balances[fromA] := from_bal-tokens;
+    balances[toA] := to_bal+tokens;
+    let resultU = true in
+    resultU
+
+  let approve (spender, tokens) =
+    allowances[msg_sender][spender] := tokens;
+    let resultU = true in
+    resultU
+
+  let transferFrom (fromA, toA, tokens) =
+    let from_bal = balances[fromA] in
+    let to_bal   = balances[toA] in
+    let allowed = allowances[fromA][toA] in
+    assert (fromA <> toA /\ from_bal >= tokens /\ allowed >= tokens);
+    balances[fromA] := from_bal-tokens;
+    balances[toA] := to_bal+tokens;
+    let resultU = true in
+    resultU
+}
+
+(* this AMM supports ERC20 tokens, ETH can be incorporated as WETH for trading *)
+object signature AMMInterface = {
+  constructor : unit -> unit;
+  (* swap : int * int * address -> unit; *)
+
+  coarsed simpleSwap0 : address -> int; (* transfer token0 to amm, results number of token1 swapped *)
+
+  (* router *)
+  (* swapTokensForExactTokens
+  swapExactTokensForTokens
+  addLiquidity (* why restrain the liquidity to not depreciating an asset too much? *)
+  removeLiquidity *)
+
+	const getReserve0 : unit -> int;
+	const getReserve1 : unit -> int;
+	const getBalance0 : unit -> int;
+
+  (* fund management functions *)
+  coarsed mint : address -> unit; (* provide liquidity to this pair *)
+  coarsed burn : address -> unit; (* remove liquidity from this pair *)
+
+  coarsed skim : address -> unit; (* arbitrage to force balances to match reserves *)
+  coarsed sync : unit -> unit; (* force reserves to match balances *)
+  k : unit -> int; (* get the constant product *)
+
+  (* oracles *)
+  (* we do not provide Uniswap V2 version of smoothed oracles at this moment *)
+  quote0 : int -> int; (* given some amount of an asset and pair reserves, returns an equivalent amount of the other asset *)
+  getAmountOut0 : int -> int; (* given an input amount of an asset and pair reserves, returns the maximum output amount of the other asset *)
+  getAmountIn0 : int -> int; (* given an output amount of an asset and pair reserves, returns a required input amount of the other asset *)
+}
+
+(* assuming 0.3% txn fee, excluding the 0.05% additional fee in Uniswap V2 design *)
+(* we do not support liquidity tokens at the moment *)
+object AutomatedMarketMaker
+  ( liquidityToken: ERC20Interface,
+    erc20Token0: FixedERC20Interface,
+    erc20Token1: FixedERC20Interface) : AMMInterface {
+
+  let _token0 : address := address(0xdac17f958d2ee523a2206206994597c13d831ec7) (* USDT *)
+  let _token1 : address := address(0x6b175474e89094c44da98b954eedeac495271d0f) (* DAI *)
+  let _owner : address := address(0x0)
+  let _reserve0 : int := 0
+  let _reserve1 : int := 0
+  let blockTimestampLast : int := 0 (* new oracle *)
+  let price0CumulativeLast : int := 0 (* new oracle *)
+  let price1CumulativeLast : int := 0 (* new oracle *)
+  let kLast : int := 0 (* reserve0 * reserve1, as of immediately after the most recent liquidity event *)
+
+  let constructor () =
+    _owner := msg_sender
+
+	let getReserve0 () =
+		let reserve0 = _reserve0 in
+		reserve0
+
+	let getReserve1 () =
+		let reserve1 = _reserve1 in
+		reserve1
+
+	let getBalance0 () =
+    let balance0 = erc20Token0.balanceOf(this_address) in
+		balance0
+
+  (* transfer token0 and token1 to this contract, then mint liquidity tokens *)
+  let mint (toA) =
+    let reserve0 = _reserve0 in
+    let reserve1 = _reserve1 in
+    let balance0 = erc20Token0.balanceOf(this_address) in
+    let balance1 = erc20Token1.balanceOf(this_address) in
+    let amount0 = balance0 - reserve0 in
+    let amount1 = balance1 - reserve1 in
+    (* update reserve 0 and reserve 1 *)
+    let totalSupply = liquidityToken.totalSupply() in
+    let liquidity = if totalSupply = 0
+      then
+        begin
+          liquidityToken.mint(address(0x0), 1000); (* lock the first liquidity tokens*)
+          amount0 * amount1 - 1000 (* in Uniswap this should be square-rooted *)
+        end
+      else
+        let x = amount0 * totalSupply / reserve0 in
+        let y = amount1 * totalSupply / reserve1 in
+        if x < y then x else y
+    in
+    assert (liquidity > 0);
+    liquidityToken.mint(toA, liquidity);
+    _reserve0 := balance0;
+    _reserve1 := balance1
+
+  (* need toA first transfer liquidity tokens to this contract, then operate *)
+  (* it does not use ERC20 style allowances, just direct transfer *)
+  let burn (toA) =
+    let reserve0 = _reserve0 in
+    let reserve1 = _reserve1 in
+    let balance0 = erc20Token0.balanceOf(this_address) in
+    let balance1 = erc20Token1.balanceOf(this_address) in
+    let liquidity = liquidityToken.balanceOf(this_address) in
+    let totalSupply = liquidityToken.totalSupply() in
+    let amount0 = liquidity * balance0 / totalSupply in
+    let amount1 = liquidity * balance1 / totalSupply in
+    assert (amount0 > 0 /\ amount1 > 0);
+    liquidityToken.burn(this_address, liquidity);
+    let success = erc20Token0.transfer(toA, amount0) in
+    assert (success);
+    let success = erc20Token1.transfer(toA, amount1) in
+    assert (success);
+    let balance0 = erc20Token0.balanceOf(this_address) in
+    let balance1 = erc20Token1.balanceOf(this_address) in
+    _reserve0 := balance0;
+    _reserve1 := balance1
+
+  (* adhere to the stanford paper formalization, targeted for vanilla proof *)
+  let simpleSwap0 (toA) =
+    let reserve0 = _reserve0 in
+    let reserve1 = _reserve1 in
+    let balance0 = erc20Token0.balanceOf(this_address) in
+    let balance1 = erc20Token1.balanceOf(this_address) in
+    let amount0In = balance0 - reserve0 in
+    let token0 = _token0 in
+    let token1 = _token1 in
+    assert (toA <> token0 /\ toA <> token1);
+    assert (amount0In > 0);
+    assert (reserve0 > 0 /\ reserve1 > 0);
+    let amountInWithFee = amount0In * 997 in
+    let numerator = amountInWithFee * reserve1 in
+    let denominator = reserve0 * 1000 + amountInWithFee in
+    let result = numerator / denominator in
+    let success = erc20Token1.transfer(toA, result) in
+    assert (success);
+    let balance0 = erc20Token0.balanceOf(this_address) in
+    let balance1 = erc20Token1.balanceOf(this_address) in
+    _reserve0 := balance0;
+    _reserve1 := balance1;
+    let resultU = result in
+    resultU
+
+  (* derives from Uniswap V2 flashswap, but not flashswap since DeepSEA does not allow control-flow aggregation  *)
+  (* first transfer tokens to this contract, then call swap to swap them *)
+  (* notice this does not refund, so possibly not optimal rate *)
+  (* let swap (amount0Out, amount1Out, toA) =
+    assert (amount0Out > 0 \/ amount1Out > 0);
+    let reserve0 = _reserve0 in
+    let reserve1 = _reserve1 in
+    let token0 = _token0 in
+    let token1 = _token1 in
+    assert (amount0Out < reserve0 /\ amount1Out < reserve1);
+    assert (toA <> token0 /\ toA <> token1);
+    (* check the assets satisfy what is wanted *)
+    let balance0 = erc20Token0.balanceOf(this_address) in
+    let balance1 = erc20Token1.balanceOf(this_address) in
+    (* we can prove that balance > reserve here *)
+    let amount0In = helper.getAmountIn(balance0, 0, reserve0) in (* balance0 - reserve0 *)
+    let amount1In = helper.getAmountIn(balance1, 0, reserve1) in
+    assert (amount0In > 0 \/ amount1In > 0);
+    let balance0Adjusted = helper.getBalanceAdjusted(balance0 - amount0Out, amount0In) in
+    let balance1Adjusted = helper.getBalanceAdjusted(balance1 - amount1Out, amount1In) in
+    assert (balance0Adjusted * balance1Adjusted > reserve0 * reserve1 * 1000 * 1000);
+
+    (* sending money *)
+    let _ = if amount0Out > 0 then
+      let success = erc20Token0.transfer(toA, amount0Out) in
+      assert (success);
+      ()
+    else
+      ()
+    in
+    let _ = if amount1Out > 0 then
+      let success = erc20Token1.transfer(toA, amount1Out) in
+      assert (success);
+      ()
+    else
+      ()
+    in
+    (* flash swap style: sent money (amount0Out, amount1Out) to msg_sender, now wait to get back *)
+    (* after got money back *)
+    (* let balance0 = erc20Token0.balanceOf(this_address) in
+    let balance1 = erc20Token1.balanceOf(this_address) in
+    let amount0In = helper.getAmountIn(balance0, amount0Out, reserve0) in
+    let amount1In = helper.getAmountIn(balance1, amount1Out, reserve1) in
+    assert (amount0In > 0 \/ amount1In > 0);
+    let balance0Adjusted = helper.getBalanceAdjusted(balance0, amount0In) in
+    let balance1Adjusted = helper.getBalanceAdjusted(balance1, amount1In) in
+    assert (balance0Adjusted * balance1Adjusted > reserve0 * reserve1 * 1000 * 1000); *)
+    (* update the reserves, also update the oracle if possible *)
+    _reserve0 := balance0;
+    _reserve1 := balance1 *)
+
+  let skim (toA) =
+    let reserve0 = _reserve0 in
+    let reserve1 = _reserve1 in
+    let balance0 = erc20Token0.balanceOf(this_address) in
+    let balance1 = erc20Token1.balanceOf(this_address) in
+    let skim0 = balance0 - reserve0 in
+    let skim1 = balance1 - reserve1 in
+    let success = erc20Token0.transfer(toA, skim0) in
+    assert (success);
+    let success = erc20Token1.transfer(toA, skim1) in
+    assert (success)
+
+  let sync () =
+    let balance0 = erc20Token0.balanceOf(this_address) in
+    let balance1 = erc20Token1.balanceOf(this_address) in
+    _reserve0 := balance0;
+    _reserve1 := balance1
+
+  let k () =
+    let reserve0 = _reserve0 in
+    let reserve1 = _reserve1 in
+    let resultU = reserve0 * reserve1 in
+    resultU
+
+  (* Uniswap did not use Q112 library to do this computation *)
+
+  (* given amount0 of token0, the equivalent value in token1 *)
+  let quote0 (amount0) =
+    assert (amount0 > 0);
+    let reserve0 = _reserve0 in
+    let reserve1 = _reserve1 in
+    assert (reserve0 > 0 /\ reserve1 > 0); (* prove that this can be dropped? *)
+    let resultU = amount0 * reserve1 / reserve0 in
+    resultU
+
+  let getAmountOut0 (amount0In) =
+    assert (amount0In > 0);
+    let reserve0 = _reserve0 in
+    let reserve1 = _reserve1 in
+    assert (reserve0 > 0 /\ reserve1 > 0);
+    let amountInWithFee = amount0In * 997 in
+    let numerator = amountInWithFee * reserve1 in
+    let denominator = reserve0 * 1000 + amountInWithFee in
+    let resultU = numerator / denominator in
+    resultU
+
+  let getAmountIn0 (amount0Out) =
+    assert (amount0Out > 0);
+    let reserve0 = _reserve0 in
+    let reserve1 = _reserve1 in
+    assert (reserve0 > 0 /\ reserve1 > 0);
+    let numerator = reserve1 * amount0Out * 1000 in
+    let denominator = (reserve0 - amount0Out) * 997 in
+    let resultU = (numerator / denominator) + 1 in
+    resultU
+}
+
+layer signature AMMLibSig = {
+  erc20Token0 : FixedERC20Interface;
+  erc20Token1 : FixedERC20Interface;
+  liquidityToken : ERC20Interface;
+}
+
+layer AMMLIB : [{}] AMMLibSig = {
+  erc20Token0 = address(0x10033) <: FixedSupplyToken;
+  erc20Token1 = address(0x10032) <: (clone FixedSupplyToken); (* cloned an object *)
+  liquidityToken = address(0x10031) <: LiquidityToken;
+}
+
+layer signature AMMSig = {
+  amm : AMMInterface
+}
+
+layer AMM : [AMMLibSig] AMMSig = {
+  amm = address(0x10030) <: AutomatedMarketMaker
+}
+
+layer COMPLETE = AMM @ AMMLIB 
+layer L = {
+  o = FixedSupplyToken
+}

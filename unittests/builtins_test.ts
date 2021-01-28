@@ -31,8 +31,8 @@ export async function runTest(chain: Chain) {
   ])
 
   printTest("address", _address == chain.getContractAddress());
-  printTest("origin", _origin == chain.getAccountAddress());
-  printTest("caller", _caller == chain.getAccountAddress());
+  printTest("origin", _origin == await chain.getAccountAddress());
+  printTest("caller", _caller == await chain.getAccountAddress());
   printTest("callvalue", _callvalue == _value);
   printTest("timestamp", _timestamp == await chain.getBlockTimestamp(blockNumber));
   printTest("number", _number == blockNumber);
