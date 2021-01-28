@@ -1,0 +1,37 @@
+event
+  | E0
+
+event
+  | E1 (v : uint)
+
+event
+    E2 (v1 : uint) (v2 : bool)
+
+event
+  | IE1 (v : uint indexed)
+  | IE2 (v1 : uint) (v2 : bool indexed)      
+
+event
+  | Transfer (fromA : uint indexed) (toA: uint indexed) (value: int)
+  | Approval (owner: uint indexed) (spender: uint indexed) (value: int) 
+
+object signature OS = {
+  f : unit -> bool    
+}
+
+object O : OS {    
+  let f () =
+    emit E0();
+    emit E1(0u42);
+    emit E2(0u1, false);
+    emit IE1(0u13);
+    emit IE2(0u2, false);
+    emit Transfer(0u1, 0u2, 42);
+    emit Approval(0u1, 0u2, 42);
+    true
+ }
+
+layer L = {
+  o = O
+}
+    

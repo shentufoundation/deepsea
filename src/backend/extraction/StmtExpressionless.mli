@@ -37,7 +37,8 @@ type statement =
 | Sjumpi
 | Shash
 | Stransfer
-| Scallmethod of Int.int * nat * nat
+| Scallargs of Int.int * nat * nat
+| Scallmethod of bool
 | Slog of nat * nat
 | Srevert
 | Scalldataload

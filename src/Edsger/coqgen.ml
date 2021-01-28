@@ -619,7 +619,7 @@ let output_ft_cond out ind f t =
       output_char out ')'
     | ATmapping _ ->
        coqgen_warning "Don't know how to output_ft_cond of a mapping";
-       output_string out "(* TODO: implement this in output_ft_cond. *)"
+       output_string out "True (* TODO: implement this in output_ft_cond. *)"
     | ATlist _ ->
       coqgen_fatal_error __LOC__ "output_ft_cond"
         ("External type " ^ string_of_a_type false t ^ " marked as provable")
@@ -732,7 +732,7 @@ let output_valid_ft_cond out ind f t =
       output_char out ')'
     | ATmapping _ ->
        coqgen_warning "Don't know how to output_valid_ft_cond of a mapping";
-       output_string out "(* TODO: implement this in output_ft_cond. *)"
+       output_string out "True (* TODO: implement this in output_ft_cond. *)"
     | ATlist t' ->
       coqgen_fatal_error __LOC__ "output_valid_ft_cond"
         ("List type " ^ string_of_a_type false t  ^ " marked as provable")
@@ -1070,7 +1070,6 @@ let output_record_hyper_field_impl out struct_type_pair_ident s f ft
   output_string out ("Global Instance " ^ struct_type_pair_ident ^
     "_" ^ f ^ "_field_impl : HyperFieldImpl " ^ struct_type_pair_ident ^ " " ^
     ft.aTypePairIdent ^ " " ^ struct_field_name_to_ident s f ^ " := {
-  Hfield_offset := " ^ string_of_int offset ^ ";
   Hfield_get s := ");
   output_get out "s"; (* fst s *)
   output_string out ";\n  Hfield_set v s := ";
@@ -1091,7 +1090,6 @@ let output_twobranch_hyper_field_impl out t s cs f ft cf
   output_string out ("Global Instance " ^ t.aTypePairIdent ^
     "_" ^ f ^ "_field_impl : HyperFieldImpl " ^ t.aTypePairIdent ^ " " ^
     ft.aTypePairIdent ^ " " ^ struct_field_name_to_ident cs cf ^ " := {
-  Hfield_offset := " ^ string_of_int offset ^ ";
   Hfield_get s := match s with \n");   (* TODO: generate fresh names instead of just "s" and "v". *)
   output_string out ("                    | "
 		     ^ valid_branch.aTypeConstrName ^ " ");
@@ -1128,7 +1126,7 @@ let output_record_hyper_field out struct_t s  f t =
       "_" ^ f ^ "_field : HyperField " ^
       struct_t.aTypePairIdent ^ " " ^
       t.aTypePairIdent ^ " " ^ struct_field_name_to_ident s f ^ ".
-Proof. solve_record_type_hyper_field. Qed.\n")
+Proof. Admitted. \n")
 
 let output_twobranch_hyper_field out struct_t s cs f cf t =
   if struct_t.aTypeProvable then
@@ -1504,7 +1502,7 @@ let rec output_rexpr out ind e = match e.aRexprDesc with
                ("Internal error, encountered unknown builtin \""^other^"\".")
 		
 let rec output_lexpr out obj ind e = match e.aLexprDesc with
-  | AEglob i -> output_string out ("(LCvar " ^ obj ^ "_" ^ i ^ "_global)")
+  | AEglob i -> output_string out ("(LCvar " ^ obj ^ "_" ^ i ^ "_var)")
   | AEfield (e', f) ->
     output_string out ("(LCfield " ^ e.aLexprType.aTypePairIdent ^ " " ^
       begin match e'.aLexprType.aTypeDesc with
@@ -1517,7 +1515,11 @@ let rec output_lexpr out obj ind e = match e.aLexprDesc with
     output_lexpr out obj ("  " ^ ind) e';
     output_char out ')'
   | AEindex (e', idx) ->
-    output_string out ("(LCindex " ^ e.aLexprType.aTypePairIdent ^ "\n" ^ ind);
+    (* print_endline (string_of_a_type true e'.aLexprType); *)
+    let lc_type = match e'.aLexprType.aTypeDesc with
+    | ATmapping _ -> "LChash"
+    | _ -> "LCindex" in
+    output_string out ("(" ^ lc_type ^ " " ^ e.aLexprType.aTypePairIdent ^ "\n" ^ ind);
     output_lexpr out obj ("  " ^ ind) e';
     output_string out ("\n" ^ ind);
     output_rexpr out ("  " ^ ind) idx;
@@ -1913,7 +1915,7 @@ let output_command env out base_layer obj method_full_name =
       output_string out ("\n" ^ ind);
       output ("  " ^ ind) pure (2::path) c2;
       output_char out ')'
-    | ACcall (s, f, es) ->
+    | ACcall (s, f, es, _, _) ->
       let o = (try (List.assoc s base_layer.aLayerAllObjects)
       with Not_found -> raise (PrimitiveNotFound s); Typecheck.dummy_object s) in
       (match o.aObjectAddress with
@@ -2499,7 +2501,7 @@ Section OBJECT_" ^ i ^ "_DEFINITION.
       output_string out ("  Definition " ^ variable_coq_name ^ " := {|
     ltype_tp_marker := " ^ f.aObjectFieldType.aTypePairIdent ^ ";
 
-    ltype_ident := Values.Iident " ^ (
+    ltype_ident := HighValues.Field HighValues.Global " ^ (
       if f.aObjectFieldIsLogical then
         string_of_ident 99
       else
@@ -2586,7 +2588,7 @@ Section OBJECT_" ^ i ^ "_DEFINITION.
     PRIMpure := " ^ string_of_bool is_pure ^ ";
     PRIMargt_marker := " ^ method_full_name ^ ".(FC_params);
     PRIMret_marker := " ^ method_full_name ^ ".(FC_returns);
-    (* PRIMcond := " ^ method_full_name ^ "_spec_cond; *)
+    PRIMcond := fun _ _ _ => True;
     (* PRIMsem := " ^ method_full_name ^ "_spec_hlist; *)
     PRIMsem_opt := " ^ method_full_name ^ "_spec_hlist_opt
   |}.
@@ -3455,6 +3457,7 @@ let gen_layer env i l =
                "Require Import DeepSpec.lib.Monad.OptionMonad.\n" ^
                "Require Import DeepSpec.lib.Monad.MonadZero.\n" ^
                "Require Import DeepSpec.core.SynthesisStmt.\n" ^
+               "Require Import DeepSpec.core.SynthesisFunc.\n" ^
                "Require Import backend.MachineModel.\n" ^
                "Existing Instance MonadState_DS.\n" ^
                "Existing Instance MonadZero_DS.\n" ^
@@ -3465,9 +3468,9 @@ let gen_layer env i l =
                  "")
               file_class_Layers in
   let _ = output_string out "\n
-(*Context {memModelOps : MemoryModelOps mem}.*)
+Context {memModelOps : MemoryModelOps mem}.
 Instance GlobalLayerSpec : LayerSpecClass := {
-  (*memModelOps := memModelOps;*)
+  memModelOps := memModelOps;
   GetHighData := global_abstract_data_type 
 }.
 \n" in
@@ -4252,16 +4255,17 @@ let do_gen_layer_code env i l =
                                 m.aMethodType.aMethodKind <> MKconstghost
                               ) o.aObjectMethods then begin
     let proofs, prf_tbl =
-#ifdef REDACTED
-        open_out "/dev/null", Hashtbl.create 100 in
-#else
         new_incremental_file env ("Obj" ^ o.aObjectName ^ "CodeProofs")
-        ("Require Import liblayers.compcertx.MakeProgram.\n" ^
+        (
+#ifndef REDACTED
+          "Require Import liblayers.compcertx.MakeProgram.\n" ^
          "Require Import liblayers.compcertx.MemWithData.\n\n" ^
+#else
          "Require Import " ^ env.project_name ^ ".Layer" ^ l.aLayerName ^ ".\n")
         (fun out -> output_string out (
 "Existing Instance GlobalLayerSpec.
-Existing Instances " ^ l.aLayerName ^ "_overlay_spec.\n"))
+Existing Instances " ^ l.aLayerName ^ "_overlay_spec.\n\n" ^
+      "Context {memModelOps : MemoryModelOps mem}.\n"))
         (Str.regexp ("\\bLemma +" ^ o.aObjectName ^ "_\\(.+\\)_spec_requires_kernel_mode\\b"))   (* TODO: fix this. *)
         file_class_ObjAux in
 #endif
@@ -4451,8 +4455,7 @@ Lemma " ^ method_full_name ^ "_vc" ^ args ^ " me d :");
     synth_func_cond " ^ method_full_name ^ " " ^ method_full_name ^ "_wf
                    " ^ args ^ " me d.
 Proof.
-  admit.
-Qed.
+Admitted.
 
 Lemma " ^ method_full_name ^ "_oblg" ^ args ^ " me d :");
         for i = 0 to nargs - 1 do
@@ -4465,8 +4468,7 @@ Lemma " ^ method_full_name ^ "_oblg" ^ args ^ " me d :");
     synth_func_obligation " ^ method_full_name ^ " " ^ method_full_name ^ "_wf
                          " ^ args ^ " me d.
 Proof.
-  admit.
-Qed.\n")
+Admitted.\n")
       end;  (* [if] requires kernel mode proof not exists  *)
 
       output_string code ("
@@ -4561,6 +4563,8 @@ let gen_global_abstract_data_type env final_layer fileDeclarations = function
   me_coinbase := me_coinbase me;
   me_timestamp := me_timestamp me;
   me_number := me_number me;
+  me_chainid := me_chainid me;
+  me_selfbalance := me_selfbalance me;
   me_balance := me_balance me;
   me_blockhash := me_blockhash me;
   me_transfer := me_transfer me;
@@ -4684,7 +4688,7 @@ let gen_global_abstract_data_type env final_layer fileDeclarations = function
 let gen_coqProj env fileDeclarations = 
   let stream = open_out (env.project_name ^ "/_CoqProject") in
   output_string stream (
-    "-R ../../.. DeepSpec\n" ^
+    "-R ../../../src DeepSpec\n" ^
     "-R . " ^ env.project_name ^ "\n" ^
     "./EdsgerIdents.v\n" ^
     "./DataTypes.v\n" ^
@@ -4696,9 +4700,17 @@ let gen_coqProj env fileDeclarations =
   | _, _ -> ()
   ) fileDeclarations;
   List.iter (function
+  | i, ADlayer l -> List.iter (fun (_, o) ->
+      output_string stream ("./Obj" ^ o.aObjectName ^ "CodeProofs.v\n"))
+      l.aLayerFreshObjects
+  | _, _ -> ()
+  ) fileDeclarations;
+#ifndef REDACTED
+  List.iter (function
   | i, ADlayer l -> output_string stream ("./LSrc" ^ i ^ ".v\n")
   | _, _ -> ()
   ) fileDeclarations;
+#endif
   close_out stream
 
 let gen_extract_make env fileDeclarations =
@@ -5105,9 +5117,8 @@ let coqgen filename ast =
      | Some l -> gen_global_abstract_data_type env l ast.aFileDeclarations ast.aFileGlobalAbstractDataType
      end;
      gen_linksource env ast.aFileDeclarations;
-     gen_prf env ast.aFileDeclarations;
-#ifndef REDACTED
      gen_coqProj env ast.aFileDeclarations; 
+#ifndef REDACTED
      gen_extract_make env ast.aFileDeclarations;
 #endif
      delete_coqgen_env env

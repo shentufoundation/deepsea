@@ -1,0 +1,61 @@
+(* Loosely based on the "sample fixed supply token contract" from https://theethereum.wiki/w/index.php/ERC20_Token_Standard#Sample_Fixed_Supply_Token_Contract *)
+
+external [[except DataTypeOps]] with "Require token.Invariant.\n"
+
+const _totalSupply = 100000
+
+object signature ERC20Interface = {
+  constructor : unit -> unit;
+  const totalSupply : unit -> int;
+  const balanceOf : address -> int;
+  transfer : address * int -> bool;
+  approve : address * int -> bool;
+  transferFrom : address * address * int -> bool
+}
+
+object FixedSupplyToken : ERC20Interface {
+  let balances : mapping[address] int := mapping_init
+  let allowances : mapping[address] mapping[address] int := mapping_init
+
+  let constructor () =
+    balances[msg_sender] := 100000
+
+  let totalSupply () =
+    let bal0 = balances[address(0)] in
+    _totalSupply - bal0 
+
+  let balanceOf tokenOwner =
+    let bal = balances[tokenOwner] in
+    bal
+     
+  let transfer(toA, tokens) =
+    let fromA = msg_sender in
+    let from_bal = balances[fromA] in
+    let to_bal   = balances[toA] in
+    assert (fromA <> toA /\ from_bal >= tokens);
+    balances[fromA] := from_bal-tokens;
+    balances[toA] := to_bal+tokens;
+    true
+
+  let approve (spender, tokens) =
+    allowances[msg_sender][spender] := tokens;
+    true
+
+  let transferFrom (fromA, toA, tokens) =
+    let from_bal = balances[fromA] in
+    let to_bal   = balances[toA] in
+    let allowed = allowances[fromA][toA] in
+    assert (fromA <> toA /\ from_bal >= tokens /\ allowed >= tokens);
+    balances[fromA] := from_bal-tokens;
+    balances[toA] := to_bal+tokens;
+    true
+
+}
+    
+layer signature FIXEDSUPPLYTOKENSig = {
+  fixedSupplyToken : ERC20Interface
+}
+
+layer FIXEDSUPPLYTOKEN : [{}] FIXEDSUPPLYTOKENSig = {
+  fixedSupplyToken = FixedSupplyToken
+} assert "Invariant.inv"

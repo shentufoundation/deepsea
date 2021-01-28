@@ -511,21 +511,18 @@ atom:
   | LPAREN RPAREN  {  mkexp_ ~loc:$sloc (PEconstant CONunit) }
   | LPAREN comma_sep_expressions RPAREN  { $2 }
   | a=atom LBRACKET e=expression RBRACKET  {  mkexp_ ~loc:$sloc (PEindex (a, e)) }
-  | atom DOT IDENT  {  mkexp_ ~loc:$sloc (PEfield ($1, $3)) }
+  (* | atom LPAREN atom RPAREN { mkexp_ ~loc:$sloc (PEpair (a1, a2))  } *)
+  (* | atom DOT IDENT  {  mkexp_ ~loc:$sloc (PEfield ($1, $3)) } *)
 ;
-atoms:
-      { [] }
-  | atoms atom  { $2 :: $1 }
-;
+
 expression:
-    atom atoms
-      { let x =if $2 = []
-          then $1
-          else (mkexp_ ~loc:$sloc (PEapp ($1, List.rev $2)))
-          in
-          mkexp_ ~loc:$sloc x.p_expression_desc
-          (* Constructors with zero parameter will be separated from PEglob
-             in later stages.*) }
+  | a=atom+ { match a with
+      | [hd] -> hd
+      | _ -> mkexp_ ~loc:$sloc (PEapp a)
+    }
+  | a1=atom+ DOT a2=atom+ { let x = mkexp_ ~loc:$sloc (PEfield (a1, a2)) in
+      (* print_endline ("PEfield: " ^ (string_of_p_expression x)); *) x
+    }
   | MINUS e=expression %prec prec_unary_prefix  {  mkexp_ ~loc:$sloc (PEun (OPneg, e)) }
   | BANG e=expression %prec prec_unary_prefix  {  mkexp_ ~loc:$sloc (PEun (OPnot, e)) }
   | BITNOT e=expression %prec prec_unary_prefix  {  mkexp_ ~loc:$sloc (PEun (OPbitnot, e)) }
@@ -797,8 +794,13 @@ layer_slot:
 ;
 layer_obj_inst:
     object_expression { mkobjinst ~loc:$sloc (POinternal $1) }
+#ifdef ANT
+  | IDENTITY LPAREN INT RPAREN COLONLESS object_expression { mkobjinst ~loc:$sloc (POexternal ((CONaddress $3), $6)) }
+  | IDENTITY LPAREN UINT RPAREN COLONLESS object_expression { mkobjinst ~loc:$sloc (POexternal ((CONaddress $3), $6)) }
+#else
   | ADDRESS LPAREN INT RPAREN COLONLESS object_expression { mkobjinst ~loc:$sloc (POexternal ((CONaddress $3), $6)) }
   | ADDRESS LPAREN UINT RPAREN COLONLESS object_expression { mkobjinst ~loc:$sloc (POexternal ((CONaddress $3), $6)) }
+#endif
 ;
 
 annotations:

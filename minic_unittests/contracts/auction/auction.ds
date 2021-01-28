@@ -1,0 +1,55 @@
+(* TODO:
+   - implement withdrawals
+ *)
+
+object signature AuctionInterface = {
+  initialize  : uint -> unit;
+  const getbid      : unit -> uint;
+  const getbidder   : unit -> address;
+  const getchair    : unit -> address;
+  const getdeadline : unit -> uint;
+  bid         : unit -> bool;
+}
+
+object OpenAuction : AuctionInterface {
+  (* initial values don't get used *)
+  let _bid        : uint := 0u0
+  let _bidder     : address := address(0)
+  let _chair      : address := address(0)
+  let _deadline   : uint := 0u0
+  let withdrawals : mapping[address] uint := mapping_init
+
+  (* placeholder for constructor *)
+  let initialize deadline =
+    _bid         := 0u0;
+    _bidder      := msg_sender;
+    _chair       := msg_sender;
+    _deadline    := deadline;
+    ()
+
+  (* getter functions *)
+  let getbid      () = _bid
+  let getbidder   () = _bidder
+  let getchair    () = _chair
+  let getdeadline () = _deadline
+
+  (* place bid *)
+  let bid () =
+    let bidder     = _bidder             in
+    let bid        = _bid                in
+    let deadline   = _deadline           in
+    let withdrawal = withdrawals[bidder] in
+
+    assert ((msg_sender   <> bidder ) /\
+            (msg_value    >  bid    ) /\
+            (block_number < deadline));
+	    
+    withdrawals[bidder] := withdrawal + bid;
+    _bidder := msg_sender;
+    _bid    := msg_value;
+    true
+}
+    
+layer AUCTION = {
+  auction = OpenAuction
+}

@@ -1,0 +1,47 @@
+(* Loosely based on the "sample fixed supply token contract" from https://theethereum.wiki/w/index.php/ERC20_Token_Standard#Sample_Fixed_Supply_Token_Contract *)
+
+external [[except DataTypeOps]] with "Require token.Invariant.\n"
+
+const _totalSupply = 100000
+
+object signature ERC20Interface = {
+  constructor : unit -> unit;
+  const totalSupply : unit -> int;
+  const balanceOf : identity -> int;
+  transfer : identity * int -> bool
+}
+
+object FixedSupplyToken : ERC20Interface {
+  let balances : mapping[identity] int := mapping_init
+
+  let constructor () =
+    balances[msg_sender] := 100000
+
+  let totalSupply () =
+    let bal0 = balances[identity(0)] in
+    _totalSupply - bal0 
+
+  let balanceOf tokenOwner =
+    let bal = balances[tokenOwner] in
+    bal
+     
+  let transfer(toA, tokens) =
+    let fromA = msg_sender in
+    let from_bal = balances[fromA] in
+    let to_bal   = balances[toA] in
+    if (fromA <> toA /\ from_bal >= tokens)
+    then begin
+      balances[fromA] := from_bal-tokens;
+      balances[toA] := to_bal+tokens;
+      true
+    end else
+      false
+}
+    
+layer signature FIXEDSUPPLYTOKENSig = {
+  fixedSupplyToken : ERC20Interface
+}
+
+layer FIXEDSUPPLYTOKEN : [{}] FIXEDSUPPLYTOKENSig = {
+  fixedSupplyToken = FixedSupplyToken
+} assert "Invariant.inv"

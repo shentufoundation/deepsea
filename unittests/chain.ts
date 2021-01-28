@@ -1,9 +1,9 @@
 export interface Chain {
-  deployContract(jsonFilename: string, constructorArgs?: any[]): void
+  deployContract(jsonFilename: string, constructorArgs?: any[]): Promise<void>
   callMethod(func: string, args?: any[], options?: {}): any
 
   getContractAddress(): string
-  getAccountAddress(): string
+  getAccountAddress(): Promise<string>
   getBlockTimestamp(blockNumber: number): Promise<number>
   getBlockParentHash(blockNumber: number): Promise<string>
   getEvents(): Promise<Event[]>

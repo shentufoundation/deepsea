@@ -1,0 +1,234 @@
+(* This contract is inspired by olive/contracts/Olive.sol , a very vanilla ERC20 token contract. *)
+
+object signature OwnableInterface = {
+  constructor : unit -> unit;
+  onlyOwner : unit -> unit;
+  transferOwnership : address -> unit
+}
+
+event
+  | OwnershipTransferred (previousOwner : address indexed) (newOwner: address indexed)
+
+object Ownable : OwnableInterface {
+  let owner : address := address(0)
+
+  let constructor () =
+    owner := msg_sender    
+
+  let onlyOwner () =
+    let a = owner in
+      assert(a = msg_sender)
+
+  let transferOwnership(newOwner) =
+    (* assert (newOwner != 0); *)
+    let b = owner in
+    emit OwnershipTransferred(b, newOwner);
+    owner := newOwner
+}
+
+layer OWNABLE : [ { } ] { ownable : OwnableInterface }  = {
+  ownable = Ownable
+}
+
+object signature PausableInterface = {
+  whenPaused : unit -> unit;
+  whenNotPaused : unit -> unit;
+  pause : unit -> unit;
+  unpause : unit -> unit
+}
+
+event
+  | Pause(v : bool)
+  | Unpause(v : bool)
+
+object Pausable (ownable : OwnableInterface) : PausableInterface  {
+  let paused : bool  := false
+
+  let whenPaused () =
+    let a = paused in 
+    assert (a = true)
+
+  let whenNotPaused () =
+    let b = paused in
+    assert (b = false)
+
+  let pause () =
+    ownable.onlyOwner();
+    paused := true;
+    let a = paused in
+    emit Pause(a)
+
+  let unpause () =
+    ownable.onlyOwner();
+    paused := false;
+    let a = paused in
+    emit Unpause(a)
+
+}
+
+layer PAUSABLE : [{ ownable : OwnableInterface }]
+                 { pausable : PausableInterface }
+= {
+  pausable = Pausable
+}
+
+event
+  | Transfer(from : address indexed) (to_: address indexed) (value: uint)
+  | Approval(owner: address indexed) (spender: address indexed) (value: uint)
+
+object signature LockableInterface = {  
+  increaseLockedValue : address * uint -> unit;
+  const isLocked : uint -> bool;
+  lockCheck : address * uint * uint -> bool;
+  lockAddress : address -> unit;
+  unlockAddress : address -> unit;
+  unlock : unit -> unit
+}
+
+object Lockable (ownable : OwnableInterface): LockableInterface {  
+  let _balanceOfLocked : mapping[address] uint := mapping_init
+  let _addressLocked : mapping[address] bool := mapping_init
+  let _unlocktime : uint := 0u1527868800
+  let _manualUnlock : bool := false
+
+  let increaseLockedValue(addr, n) =
+     let a = _balanceOfLocked[addr] in
+        _balanceOfLocked[addr] := a + n
+
+  let isLocked now =
+    let unlock_time = _unlocktime in
+      let manual_unlock = _manualUnlock in
+        ((now < unlock_time) /\ (!manual_unlock))
+
+  let lockCheck (from, val, now) =
+    (* assert (_addressLocked[from] == false); *)
+      let unlock_time = _unlocktime in
+        let manual_unlock = _manualUnlock in
+          if ((now < unlock_time) /\ (!manual_unlock)) 
+          then begin
+            (* assert(val <= (balances[from] - balanceOfLocked[from])); *)
+            true   
+          end else
+            false
+
+  let lockAddress addr =
+    _addressLocked[addr] := true
+
+  let unlockAddress addr =
+    _addressLocked[addr] := false
+
+  let unlock () =
+    ownable.onlyOwner();
+    let manual_unlock = _manualUnlock in
+      assert(!manual_unlock);
+      _manualUnlock := true
+
+}
+
+layer LOCKABLE : [{ ownable : OwnableInterface }]
+                 { lockable : LockableInterface }
+= {
+  lockable = Lockable
+}
+
+(* we cannot have "to" which is a token that could cause parse error; need to mention in reference *)
+
+object signature ERC20Interface = {
+  constructor : unit -> unit;
+  const balanceOf : address -> uint;
+  transfer : address * uint * uint -> bool;
+  allowance : address * address -> uint;
+  transferFrom : address * address * uint * uint -> bool;
+  approve : address * uint -> bool;
+
+  increaseApproval : address * uint -> bool;
+  decreaseApproval : address * uint -> bool
+}
+
+object Token (pausable : PausableInterface, ownable : OwnableInterface, lockable : LockableInterface) : ERC20Interface {
+  let _totalSupply : uint := 0u10000000000
+  let _balances : mapping[address] uint := mapping_init
+  let _allowed : mapping[address] mapping[address] uint := mapping_init
+
+  let constructor () =
+    let a = _totalSupply in
+      _balances[msg_sender] := a
+
+  let balanceOf addr =
+    _balances[addr]
+
+  let transfer (to_, value, now) =
+    let check = lockable.lockCheck(msg_sender, value, now) in
+    assert(check <> false);
+    pausable.whenNotPaused();
+    let from_ = msg_sender in 
+    let sender_bal = _balances[from_] in
+    let receiver_bal = _balances[to_] in
+    assert(to_ <> address(0));
+    assert(value <= sender_bal);
+    assert (sender_bal >= value);
+    _balances[from_] := sender_bal - value;
+    (* todo: add suitable overflow assertion here. *)
+    _balances[to_] := receiver_bal + value;
+    emit Transfer(msg_sender, to_, value);
+    true
+
+  let allowance (owner, spender)  =
+     let res = _allowed[owner][spender] in
+      res
+
+  let transferFrom (from_, to_, value, now) = 
+    let check = lockable.lockCheck(from_, value, now) in
+    assert(check <> false);
+    pausable.whenNotPaused();
+    let from_bal = _balances[from_] in
+      let from_allow = _allowed[from_][msg_sender] in
+        let to_bal = _balances[to_] in
+    assert(to_ <> address(0));
+    assert(value <= from_bal);
+    assert(value <= from_allow);
+    _balances[from_] := from_bal - value;
+    (* todo: overflow check for the addition. *)
+    _balances[to_] := to_bal + value;
+    _allowed[from_][msg_sender] := from_allow- (value);
+    emit Transfer(from_, to_, value);
+    true
+
+  let approve (spender, value) =
+     (* pausable.whenNotPaused(); *)
+     _allowed[msg_sender][spender] := value;
+     emit Approval(msg_sender, spender, value);
+     true
+
+
+  let increaseApproval(spender, addedValue) =
+    pausable.whenNotPaused();
+    (* todo: overflow check *)
+    let allowmsgsender = _allowed[msg_sender][spender] in
+    _allowed[msg_sender][spender] := allowmsgsender + addedValue;
+    emit Approval(msg_sender, spender, allowmsgsender);
+    true
+
+  let decreaseApproval (_spender, _subtractedValue) =
+    pausable.whenNotPaused();
+    let oldValue = _allowed[msg_sender][_spender] in
+    if (_subtractedValue > oldValue) then begin
+      _allowed[msg_sender][_spender] := 0u0;
+      let a = _allowed[msg_sender][_spender] in
+      emit Approval(msg_sender, _spender, a);
+      true
+    end else begin
+      _allowed[msg_sender][_spender] := oldValue - _subtractedValue;
+      let b = _allowed[msg_sender][_spender] in
+      emit Approval(msg_sender, _spender, b);
+      true
+    end
+}
+
+layer TOKEN : [{ pausable : PausableInterface; ownable : OwnableInterface; lockable : LockableInterface}] { token : ERC20Interface }
+= {
+token = Token
+}
+
+layer CONTRACT = TOKEN @ LOCKABLE @ PAUSABLE @ OWNABLE
+

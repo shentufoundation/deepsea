@@ -21,6 +21,8 @@ val clike_lvalue : expr -> expr optErr
 
 val clike_rvalue_list : expr list -> expr list optErr
 
+val clike_rvalue_option : expr option -> expr option optErr
+
 val clike_stm : statement -> statement optErr
 
 val clike_function : coq_function -> coq_function optErr

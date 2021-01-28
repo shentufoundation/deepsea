@@ -1,0 +1,30 @@
+object signature OS = {
+  setThenGet : int -> int;
+  multiply : int * int -> int;
+}
+
+object O : OS {
+
+  let _val : int := 0
+
+  let setThenGet a = 
+    _val := a;
+    let val = _val in
+    val
+  
+  (* a can be negative;
+     b must be positive *)
+  let multiply (a, b) =
+    for i = 0 to b do
+      begin
+        let val = _val in
+        _val := val + a
+      end;
+    let val = _val in 
+    val
+
+}
+
+layer L = {
+  o = O
+}

@@ -19,7 +19,8 @@ type statement =
 | Sjumpi of expr * label
 | Shash of expr * expr * expr option
 | Stransfer of expr * expr * label
-| Scallmethod of expr * ident list * Int.int * expr * expr list * label
+| Scallmethod of expr * ident list * Int.int * expr * expr option * expr list
+   * label
 | Slog of expr list * expr list
 | Srevert
 | Sfetchargs of bool

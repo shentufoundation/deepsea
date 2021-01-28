@@ -19,7 +19,8 @@ type statement =
 | Sdone
 | Shash of expr * expr * expr option * node
 | Stransfer of expr * expr * node * node
-| Scallmethod of expr * ident list * Int.int * expr * expr list * node * node
+| Scallmethod of expr * ident list * Int.int * expr * expr option * expr list
+   * node * node
 | Slog of expr list * expr list * node
 | Srevert
 
@@ -29,7 +30,8 @@ type coq_function = { fn_return : coq_type;
                       fn_params : (ident, coq_type) prod list;
                       fn_temps : (ident, coq_type) prod list;
                       fn_locals : (ident, coq_type) prod list;
-                      fn_code : code; fn_entrypoint : node }
+                      fn_code : code; fn_entrypoint : node; fn_nextnode : 
+                      node }
 
 val fn_return : coq_function -> coq_type
 
@@ -42,5 +44,7 @@ val fn_locals : coq_function -> (ident, coq_type) prod list
 val fn_code : coq_function -> code
 
 val fn_entrypoint : coq_function -> node
+
+val fn_nextnode : coq_function -> node
 
 type genv = (coq_function, coq_type) Genv.t

@@ -1,12 +1,12 @@
 import { Conflux, Account } from 'js-conflux-sdk'
 import { Chain, Event } from './chain'
-import { getJsonFilename } from './utils'
+import { cleanCombined, getJsonFilename } from './utils'
 import _ from 'lodash'
 
 
 export class ConfluxChain implements Chain {
   private _conflux: Conflux
-  private _contract
+  private _contract: any
   private _genesisAccount: Account
   private _abi: any[]
 
@@ -36,8 +36,9 @@ export class ConfluxChain implements Chain {
     return logger
   }
 
-  async deployContract(jsonFilename: string, constructorArgs=[]){
-    const {abi, bytecode} = require(getJsonFilename(jsonFilename))
+  async deployContract(jsonFilename: string, constructorArgs=[]) {
+    const combined = require(getJsonFilename(jsonFilename))
+    const {abi, bytecode} = cleanCombined(combined)
     this._contract = this._conflux.Contract({ abi, bytecode })
     this._abi = abi
 
@@ -81,13 +82,16 @@ export class ConfluxChain implements Chain {
   getContractAddress(): string {
     return this._contract.address
   }
-  getAccountAddress(): string {
+
+  async getAccountAddress(): Promise<string> {
     return this._genesisAccount.toString()
   }
+
   async getBlockTimestamp(blockNumber: number): Promise<number> {
     let receipt: any = await this._conflux.getBlockByEpochNumber(blockNumber)
     return receipt.timestamp
   }
+
   async getBlockParentHash(blockNumber: number): Promise<string> {
     let receipt: any = await this._conflux.getBlockByEpochNumber(blockNumber)
     return receipt.parentHash
@@ -116,6 +120,6 @@ export class ConfluxChain implements Chain {
 }
 
 interface Logger {
-  info()
-  error()
+  info(): any
+  error(): any
 }

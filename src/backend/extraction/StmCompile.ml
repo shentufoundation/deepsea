@@ -217,8 +217,12 @@ let stm_compiled stm _ code_label =
   | Sjumpi -> command_compiled Coq_evm_jumpi
   | Shash -> command_compiled Coq_evm_sha3
   | Stransfer -> command_compiled Coq_evm_call
-  | Scallmethod (sg, args, rvcount) ->
-    append_compiled Coq_evm_call (push_public_args args O rvcount sg)
+  | Scallargs (sg, args, rvcount) -> push_public_args args O rvcount sg
+  | Scallmethod b ->
+    (match b with
+     | Coq_true -> command_compiled Coq_evm_call
+     | Coq_false ->
+       append_compiled Coq_evm_call (command_compiled Coq_evm_gas))
   | Slog (ntopics, nargs) ->
     (match Nat.ltb nargs (S (S (S (S (S O))))) with
      | Coq_true ->

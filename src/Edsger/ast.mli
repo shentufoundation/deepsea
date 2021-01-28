@@ -191,7 +191,7 @@ and a_command_desc =
   | ACyield of a_rexpr
   | AClet of tmp_id_t * ident * a_command * a_command
   | ACsequence of a_command * a_command
-  | ACcall of ident * ident * a_rexpr list
+  | ACcall of ident * ident * a_rexpr list * a_rexpr option * a_rexpr option
   | ACcond of a_rexpr * a_command * a_command
   | ACfor of tmp_id_t * ident * a_rexpr * tmp_id_t * a_rexpr * a_command
       (* FOR (*NUM*)    i     = 0      TO (*HOLDER*) n      DO s.run i *)

@@ -13,11 +13,11 @@ let deepsea_basename = "DeepSEA/AntChain-EVM"
 #else
 let deepsea_basename = "DeepSEA/EVM"
 #endif
-let deepsea_version_num = "1.2.0"
+let deepsea_version_num = "1.3.0"
 
 let deepsea_version = deepsea_basename ^ " " ^ deepsea_version_num
 
-type mode = ABI | BYTECODE | BYTECODE_RUNTIME | COMBINED_JSON | ASSEMBLY | MINIC | MINIC_VERBOSE | COQ | EWASM | EWASM_RUNTIME | METADATA | UCLID | CGRAPH | CLASH
+type mode = ABI | BYTECODE | BYTECODE_RUNTIME | COMBINED_JSON | ASSEMBLY | ASSEMBLY_RUNTIME | MINIC | MINIC_VERBOSE | COQ | EWASM | EWASM_RUNTIME | METADATA | UCLID | CGRAPH | CLASH
 
 let string_of_token = function
   | ARRAY        -> "ARRAY"
@@ -195,7 +195,9 @@ let main argv =
     | "abi"      -> ABI
     | "combined-json" -> COMBINED_JSON
     | "assembly" -> ASSEMBLY
+    | "assembly-runtime" -> ASSEMBLY_RUNTIME
     | "minic"    -> MINIC
+    | "minic-verbose" -> MINIC_VERBOSE
     | "coq"      -> COQ
     | "ewasm"     -> EWASM
     | "uclid" -> UCLID
@@ -210,8 +212,8 @@ let main argv =
   let parse_structure = try
     Parser.file
       Lexer.token
-      (*fun buf -> let t = Lexer.token buf
-                  in print_endline ("TOK: " ^ string_of_token t); t*)
+      (* (fun buf -> let t = Lexer.token buf *)
+      (*   in print_endline ("TOK: " ^ string_of_token t); t) *)
       buf
      with Failure _
         | Parser.Error  ->
@@ -232,8 +234,7 @@ let main argv =
   else
     let abi = abigen ast_structure in
     match mode_flag with
-    (*  COQ -> Coqgen.coqgen filename ast_structure *)
-    | COQ -> print_endline "Coq output is not supported in this preview release."; exit 1
+    | COQ -> Coqgen.coqgen filename ast_structure
     | ABI -> print_endline abi
     | METADATA -> print_endline (metadata deepsea_version_num argv.(0) filename abi)
     | _ ->
@@ -277,7 +278,8 @@ let main argv =
           print_endline (Backend.ASM.mnemonics_clash cg')) cgd in ())
       | BYTECODE -> print_endline (bytecode false ge)
       | BYTECODE_RUNTIME -> print_endline (bytecode true ge)
-      | ASSEMBLY -> print_endline (assembly ge)
+      | ASSEMBLY -> print_endline (assembly false ge)
+      | ASSEMBLY_RUNTIME -> print_endline (assembly true ge)
       | COMBINED_JSON ->
         let asm, _ , programsize = get_bytecode_params ge in
         print_endline (combined_json filename abi (Backend.ASM.assemble asm))

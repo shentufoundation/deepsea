@@ -16,7 +16,7 @@ type statement =
 | Sbreak
 | Sreturn of ident option
 | Stransfer of expr * expr
-| Scallmethod of expr * ident list * Int.int * expr * expr list
+| Scallmethod of expr * ident list * Int.int * expr * expr option * expr list
 | Slog of expr list * expr list
 | Srevert
 

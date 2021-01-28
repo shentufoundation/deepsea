@@ -102,6 +102,10 @@ let rec show_expr show_tmp expr =
   else
     expr'
 
+let show_expr_opt show_tmp = function
+  | D.None -> ""
+  | D.Some e -> show_expr show_tmp e
+
 (* val show_stmt : stmt -> string list *)
 let rec show_stmt show_tmp indent stmt =
   let show_stmt = show_stmt show_tmp in
@@ -122,12 +126,12 @@ let rec show_stmt show_tmp indent stmt =
   List.append (show_stmt false s1) (show_stmt false s2)
   | Sifthenelse (e, s1, s2) ->
     pad (List.flatten [
-        [ sprintf "if (%s) {" (show_expr e) ];
-        show_stmt true s1;
-        [ "} else {" ];
-        show_stmt true s2;
-        [ "}" ];
-      ])
+      [ sprintf "if (%s) {" (show_expr e) ];
+      show_stmt true s1;
+      [ "} else {" ];
+      show_stmt true s2;
+      [ "}" ];
+    ])
   | Sloop s ->
     pad (List.flatten [
     (* TODO: add "true" and "false" keywords *)
@@ -144,8 +148,16 @@ let rec show_stmt show_tmp indent stmt =
         [ sprintf "return %s;" (show_tmp i) ])
   | Stransfer (e1, e2) ->
     [ sprintf "transfer(%s, %s);" (show_expr e1) (show_expr e2) ]
-  | Scallmethod (e1, idents, v, e2, es) ->
-    [ "// CALLMETHOD unimplemented" ]
+  | Scallmethod (e1, idents, e2, v, g, es) ->
+      [ sprintf "callmethod(%s);" (String.concat "; " [
+          (show_expr e1);
+          (String.concat ", " (List.map show_tmp (DE.caml_list idents)));
+          (show_coq_int e2);
+          (show_expr v);
+          (show_expr_opt show_tmp g);
+          (String.concat ", " (List.map show_expr (DE.caml_list es)))
+        ])
+      ]
   | Slog (topics, args) -> let f l = String.concat ", " (List.map show_expr l) in
     [ sprintf "emit(%s; %s);" (f (DE.caml_list topics)) (f (DE.caml_list args)) ]
   | Srevert ->

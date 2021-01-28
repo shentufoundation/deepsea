@@ -1,35 +1,53 @@
 open AST
 open Ascii
-open Cop
+open BinNums
 open Datatypes
+open ExpStacked
 open Globalenvs
 open Integers
-open Language
-open List0
 open LowValues
 open Maps0
+open MemoryModel
 open Monad
 open OptErrMonad
-open Options
-open Semantics3
-open StackEnv
+open Semantics2
 open StmtExpressionless
+open StmtStacked
 open String0
-open Zpower
+open Trees
 
-val methodical_fundefs : coq_function PTree.t -> code
+val expressionless_expr : expr -> StmtExpressionless.statement
 
-val methodical_opt_function : coq_function option -> code
+val pops : nat -> StmtExpressionless.statement list
 
-val methodical_methods : coq_function option IntMap.t -> code
+val cleanup : nat -> StmtExpressionless.statement list
 
-val label_method_starts_with : coq_function -> label optErr
+val expressionless_rt : ExpStacked.ret_type -> ret_type optErr
 
-val sg_val : Int.int -> coq_val
+val fetch_args :
+  function_kind -> nat -> nat -> StmtExpressionless.statement list
 
-val methodical_multiplexer_body :
-  Int.int list -> coq_function option IntMap.t -> code optErr
+val extract_lbl : typed_label -> label
 
-val methodical_main : program -> code optErr
+val expressionless_stm :
+  statement -> function_kind -> StmtExpressionless.statement list optErr
 
-val methodical_genv : program -> Language.genv optErr
+val expressionless_code :
+  code -> function_kind -> StmtExpressionless.code optErr
+
+val expressionless_function :
+  function_kind -> coq_function -> StmtExpressionless.coq_function optErr
+
+val expressionless_fundefs :
+  coq_function PTree.t -> StmtExpressionless.coq_function PTree.t optErr
+
+val expressionless_methods :
+  coq_function option IntMap.t -> StmtExpressionless.coq_function option
+  IntMap.t optErr
+
+val expressionless_constructor :
+  coq_function option -> StmtExpressionless.coq_function optErr
+
+val expressionless_genv : genv -> StmtExpressionless.genv optErr
+
+val expressionless_program : program -> StmtExpressionless.program optErr

@@ -1,0 +1,59 @@
+(* An example where the constructors take more than one argument. *)
+
+object signature LowerInterface = {
+  constructor : int * int -> unit; 
+  test_lower : unit -> unit; 
+}
+
+object Lower : LowerInterface {
+  let x : int := 0
+  let y : int := 0
+
+  let constructor (_x, _y) =
+    x := _x;
+    y := _y  
+
+  let test_lower () = 
+    let _x = x in
+    let _y = y in
+    assert(_x = 6 /\ _y = 7) 
+
+}
+
+layer LOWER : [ { } ] { lower : LowerInterface }  = {
+  lower = Lower
+}
+
+object signature UpperInterface = {
+  constructor : int * int -> unit; 
+  test_upper : unit -> unit;
+  const get_w : unit -> int    
+}
+
+object Upper (lower : LowerInterface) : UpperInterface  {
+  let z : int := 0
+  let w : int := 0
+
+  let constructor (_z, _w) =
+    z := _z;
+    w := _w  
+
+  let test_upper () =
+    lower.test_lower(); 
+    let _z = z in
+    let _w = w in
+    assert (_z = 8 /\ _w = 9);
+    ()
+
+  let get_w () =
+    let _w = w in
+    w
+}
+
+layer UPPER : [{ lower : LowerInterface }]
+    { upper : UpperInterface    }
+= {
+  upper = Upper
+}
+
+layer CONTRACT = UPPER @ LOWER

@@ -1,47 +1,70 @@
+open AST
 open Ascii
-open BinNums
-open Cop
-open Ctypes
 open Datatypes
-open ExpCintptr
-open ExpMiniC
 open Globalenvs
+open Integers
+open Labels
+open List0
 open Maps0
 open Monad
 open OptErrMonad
-open StackEnv
-open StmtCintptr
-open StmtClocal
+open Options
+open Semantics0
+open StmtClinear
 open String0
 open Trees
 
-val spE : ExpCintptr.expr
+val nodes_in_code : code -> label list
 
-val offsetE : coq_function -> ExpCintptr.expr
+val allocate_labels : fd_label -> code -> label_map -> label_map
 
-val pushS : coq_function -> StmtCintptr.statement
+val allocate_labels_fundef :
+  fd_label -> coq_function -> label_map -> label_map
 
-val popS : coq_function -> StmtCintptr.statement
+val xallocate_labels_fun :
+  (label, coq_function) prod list -> label_map -> label_map
 
-val cintptr_expr : coq_function -> expr -> ExpCintptr.expr optErr
+val allocate_labels_fun : coq_function PTree.t -> label_map -> label_map
 
-val cintptr_exprs : coq_function -> expr list -> ExpCintptr.expr list optErr
+val allocate_labels_methods :
+  Int.int list -> coq_function option IntMap.t -> label_map -> label_map
 
-val cintptr_expr_opt :
-  coq_function -> expr option -> ExpCintptr.expr option optErr
+val allocate_labels_constructor :
+  coq_function option -> label_map -> label_map
 
-val cintptr_stmt : coq_function -> statement -> StmtCintptr.statement optErr
+val allocate_labels_ge : genv -> label_map
 
-val cintptr_function : coq_function -> StmtCintptr.coq_function optErr
+val clabeled_stm : fd_label -> label_map -> statement -> statement optErr
 
-val cintptr_fundefs :
-  coq_function PTree.t -> StmtCintptr.coq_function PTree.t optErr
+val clabeled_code : fd_label -> label_map -> code -> code optErr
 
-val cintptr_methods :
-  coq_function option IntMap.t -> StmtCintptr.coq_function option IntMap.t
-  optErr
+val fn_is_method : fd_label -> bool
 
-val cintptr_constructor :
-  coq_function option -> StmtCintptr.coq_function optErr
+val clabeled_function_body : label -> fd_label -> code -> code
 
-val cintptr_genv : genv -> StmtCintptr.genv optErr
+val clabeled_function :
+  label_map -> fd_label -> coq_function -> coq_function optErr
+
+val clabeled_fundef :
+  label_map -> fd_label -> coq_function -> coq_function optErr
+
+val clabeled_fundef_f :
+  label_map -> label -> coq_function -> (label, coq_function) prod optErr
+
+val clabeled_fundefs :
+  label_map -> coq_function PTree.t -> coq_function PTree.t optErr
+
+val xclabeled_methods :
+  label_map -> Int.int list -> coq_function option IntMap.t -> coq_function
+  option IntMap.t optErr
+
+val clabeled_methods :
+  label_map -> Int.int list -> coq_function option IntMap.t -> coq_function
+  option IntMap.t optErr
+
+val clabeled_constructor :
+  label_map -> coq_function option -> coq_function optErr
+
+val clabeled_genv : label_map -> genv -> genv optErr
+
+val clabeled_program : genv -> program optErr
