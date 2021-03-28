@@ -274,7 +274,7 @@ End StateMonadOption.
         apply (put_osT_curried H); intros; clear H
       | (runStateT (guard _) _  = Some (_, _))     =>
         apply (guard_pure_osT2_curried H); intros; clear H
-      | (runStateT (if ?b then _ else _) _ = ret _) =>
+      | (runStateT (if ?b then _ else _) _ = Some _) =>
         destruct b eqn:?;
         inv_runStateT1_branching H
     | _ => idtac        
