@@ -1,0 +1,29 @@
+object signature SimpleAddressInterface = {
+  init : unit -> unit;
+  get : unit -> address;
+  set : address -> unit
+}
+
+object SimpleAddress : SimpleAddressInterface {
+  let _val : address := address(0xefca)
+
+  let init () =  
+    _val := address(0xefca);
+    ()
+
+  let get () =
+    _val := address(0x12345678);
+    let val = _val in
+    val
+
+  let set x =
+    _val := x
+}
+    
+layer signature SIMPLEADDRESSCONTRACTSig = {
+  simpleAddress : SimpleAddressInterface
+}
+
+layer SIMPLEADDRESSCONTRACT : [{}] SIMPLEADDRESSCONTRACTSig = {
+  simpleAddress = SimpleAddress
+}

@@ -1,0 +1,193 @@
+(* atomic cross-chain swaps - 3-way swap
+			 A    one leader only, form a cycle. 
+			/ \
+		 B - C 
+*) 
+type Transfer = {
+	_amount : uint;
+	_to : address; 
+}
+
+external let transfer_nil [[unfold always]] : list Transfer = "nil"
+external let transfer_cons [[unfold always]] : Transfer * (list Transfer) -> (list Transfer) = "(fun a b => (cons a b))"
+external let transfer_length [[unfold always]] : (list Transfer) -> uint = "(fun l => Z_of_nat (length l))"
+external let transfer_cons_unzip [[unfold always]] : address * uint * (list Transfer) -> (list Transfer) = 
+		"(fun toaddr much e => {|_amount := much; _to := toaddr |} :: e)"
+
+
+object signature EVMOpcodeInterface = {
+	(* environment handles the transfer as an append operation to a list 
+		of events *) 
+  transfer : address * uint -> unit;
+}
+
+trusted object EVMOpcode : EVMOpcodeInterface {
+    let _events : list Transfer := transfer_nil
+
+    let transfer (toaddr, much) =
+        let e = _events in
+        _events := transfer_cons_unzip (toaddr, much, e);
+        ()
+}
+
+(* place holder for digraph related methods *)
+object signature DiGraphInterface = {
+	initialize : address * address * address * uint -> unit; 
+	const diam : unit -> uint;
+	const maxpathlen : address * address -> uint; 
+}
+
+object signature SwapContractInterface = {
+
+	initialize : address * address * address * hashvalue * uint * uint -> unit;
+	unlock : uint -> unit; 
+	claim : unit -> unit; 
+	refund : unit -> unit; 
+}
+
+(* not really used in here *)
+object DiGraph () : DiGraphInterface {
+	let _graphLeader : address := address(0u0) (* A *)
+	let _partyB : address := address(0u0) (* B *)
+	let _partyC : address := address(0u0) (* C *)
+	let _numParties : uint := 0u0 
+
+	(* needs to verify that the max_timeout is max length of all possible routes 
+		from leader to counterparty *)
+	let initialize (graphLeader, partyB, partyC, numParties) = 
+		_graphLeader := graphLeader; 
+		_partyB := partyB; 
+		_partyC := partyC;
+		_numParties := numParties; 
+		()
+
+	(* in general, a crude upper bound *)
+	let diam () = 
+		let numParties = _numParties in 
+		numParties
+
+	let maxpathlen (ld, party) = 
+		(* in our example for now, ld is ⟼not used *)
+		let partyB = _partyB in 
+		let partyC = _partyC in 
+		let leader = _graphLeader in 
+			if party = leader then 0u1
+			else begin if party = partyB then 0u3 else 0u2 end
+
+}
+
+(* contract interface *)
+object SwapContract ((* digraph: DiGraphInterface, *)evm: EVMOpcodeInterface): SwapContractInterface {
+	let _assetAmount : uint := 0u0 
+  let _leader : address := address(0u0)
+	let _hashlock : hashvalue := null_hash
+	let _timelock : uint := 0u0
+	let _party : address := address(0u0)
+	let _counterparty : address := address(0u0)
+	let _otherparty : address := address(0u0) (* only for the 3 way swap case! *)
+	let _start : uint := 0u0 
+	let _delta : uint := 0u0 
+	let _unlocked : bool := false 
+	(* after the asset has been claimed, halt *)
+	let _ended : bool := false 
+
+
+	(* initialize the contract, party (msg_sender) publishes contract *)
+	let initialize (leader, otherparty, counterparty, hashlock, start, delta) = 
+		(* start time is at least delta into the future *)
+		assert(start >= block_timestamp + delta);
+		(* three distinct parties *)
+		assert(msg_sender <> counterparty /\ msg_sender <> otherparty /\ otherparty <> counterparty);
+		_assetAmount := msg_value; 
+		_leader := leader;
+		_otherparty := otherparty; 
+		_party := msg_sender;
+		_counterparty := counterparty; 
+		_hashlock := hashlock;
+		_start := start; 
+		_delta := delta; 
+		_ended := false;
+		_unlocked := false;
+		let timelock = 
+			if msg_sender = leader then 0u6*delta (* A -> B *)
+			else 
+				if otherparty = leader 
+				then 0u5*delta (* B -> C*) else 0u4*delta (* C -> A *)
+			in
+		_timelock := timelock;
+		()
+
+	(* In general, we can't do unlock(secret), because secret can be learned by everyone else
+		but in the protocol, hashkey consists of path+signatures too. We assume that 
+		signatures can't be faked, hence exposing secret in this way is fine. 
+
+		Here, we didn't have signature, but in the proof, we model the observation of secrets 
+		revealed as a sequence of events and make sure that they must be in order *)
+	let unlock (secret) = 
+		let counterparty = _counterparty in 
+		let hashlock = _hashlock in 
+		let start = _start in 
+		let timelock = _timelock in 
+		let secret_hash = keccak256(secret) in 
+			assert (msg_sender = counterparty); 
+			assert (block_timestamp < start+timelock);
+			assert (secret_hash = hashlock); 
+			_unlocked := true; 
+			()
+
+	let claim () = 
+		let counterparty = _counterparty in 
+		let isUnlocked = _unlocked in 
+		let assetAmount = _assetAmount in 
+		let ended = _ended in 
+			assert (!ended); 
+			assert (counterparty = msg_sender);
+			assert (isUnlocked); 
+			evm.transfer (counterparty, assetAmount); 
+			_ended := true; 
+			()
+
+	let refund () =
+		let party = _party in
+		let assetAmount = _assetAmount in 
+		let ended = _ended in 
+		let start = _start in
+		let timelock = _timelock in 
+			assert (!ended);
+			assert (party = msg_sender); 
+			(* note that we only care about time, doesn't matter whether it's locked or unlocked *)
+			assert ((* (!isUnlocked) /\ *)
+					(block_timestamp >= start+timelock)); 
+			evm.transfer (party, assetAmount); 
+			_ended := true;
+			() 
+}
+
+(*layer signature DIGRAPHSig = {
+	digraph : DiGraphInterface
+}
+*)
+layer signature SWAPCONTRACTSig = {
+	swapcontract : SwapContractInterface
+}
+
+layer signature EVMOPCODESig = {
+    evm : EVMOpcodeInterface;
+    (*digraph : DiGraphInterface;*)
+}
+
+layer EVMOPCODE : [{}] EVMOPCODESig = {
+    evm = EVMOpcode; 
+    (*digraph = DiGraph*)
+}
+
+(*layer DIGRAPH : [EVMOPCODESig] DIGRAPHSig = {
+	digraph = DiGraph
+}*)
+
+layer SWAPCONTRACT : [EVMOPCODESig] SWAPCONTRACTSig = {
+  swapcontract = SwapContract
+}
+
+layer COMPLETE = SWAPCONTRACT @ EVMOPCODE 
+

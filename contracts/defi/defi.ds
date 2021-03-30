@@ -1,0 +1,612 @@
+(* ---> refer to concepts in Google Docs
+  * price oracle
+  * AMM (3 variants)
+  * Lending
+  * BZXDEX
+  * SNXDEX
+
+  keyword:
+  * refined
+  * asset
+*)
+
+object signature ERC20Interface = {
+  constructor : unit -> unit;
+  mint : address * int -> unit;
+  burn : address * int -> unit;
+  totalSupply : unit -> int;
+  balanceOf : address -> int;
+  transfer : address * int -> bool;
+  approve : address * int -> bool;
+  transferFrom : address * address * int -> bool;
+}
+
+object LiquidityToken : ERC20Interface {
+  let _totalSupply : int := 0
+  let balances : mapping[address] int := mapping_init
+  let allowances : mapping[address] mapping[address] int := mapping_init
+
+  let constructor () =
+    balances[msg_sender] := 100000
+
+  let mint (toA, value) = 
+    let totalSupply = _totalSupply in
+    _totalSupply := totalSupply + value;
+    let to_bal = balances[toA] in
+    balances[toA] := to_bal + value
+
+  let burn (fromA, value) = 
+    let totalSupply = _totalSupply in
+    _totalSupply := totalSupply - value;
+    let from_bal = balances[fromA] in
+    balances[fromA] := from_bal - value
+
+  let totalSupply () =
+    let bal0 = balances[address(0x0)] in
+    let totalSupply = _totalSupply in
+    let resultU = totalSupply - bal0 in
+    resultU
+
+  let balanceOf tokenOwner =
+    let bal = balances[tokenOwner] in
+    let resultU = bal in
+    resultU
+     
+  let transfer(toA, tokens) =
+    let fromA = msg_sender in
+    let from_bal = balances[fromA] in
+    let to_bal   = balances[toA] in
+    assert (fromA <> toA /\ from_bal >= tokens);
+    balances[fromA] := from_bal-tokens;
+    balances[toA] := to_bal+tokens;
+    let resultU = true in
+    resultU
+
+  let approve (spender, tokens) =
+    allowances[msg_sender][spender] := tokens;
+    let resultU = true in
+    resultU
+
+  let transferFrom (fromA, toA, tokens) =
+    let from_bal = balances[fromA] in
+    let to_bal   = balances[toA] in
+    let allowed = allowances[fromA][toA] in
+    assert (fromA <> toA /\ from_bal >= tokens /\ allowed >= tokens);
+    balances[fromA] := from_bal-tokens;
+    balances[toA] := to_bal+tokens;
+    let resultU = true in
+    resultU
+}
+
+object signature FixedERC20Interface = {
+  constructor : unit -> unit;
+  const totalSupply : unit -> int;
+  balanceOf : address -> int;
+  transfer : address * int -> bool;
+  approve : address * int -> bool;
+  transferFrom : address * address * int -> bool
+}
+
+object FixedSupplyToken : FixedERC20Interface {
+  let _totalSupply : int := 100000
+  let balances : mapping[address] int := mapping_init
+  let allowances : mapping[address] mapping[address] int := mapping_init
+
+  let constructor () =
+    _totalSupply := 100000;
+    balances[msg_sender] := 100000
+
+  let totalSupply () =
+    let bal0 = balances[address(0x0)] in
+    let totalSupply = _totalSupply in
+    let resultU = totalSupply - bal0 in
+    resultU
+
+  let balanceOf tokenOwner =
+    let bal = balances[tokenOwner] in
+    let resultU = bal in
+    resultU
+     
+  let transfer(toA, tokens) =
+    let fromA = msg_sender in
+    let from_bal = balances[fromA] in
+    let to_bal   = balances[toA] in
+    assert (fromA <> toA /\ from_bal >= tokens);
+    balances[fromA] := from_bal-tokens;
+    balances[toA] := to_bal+tokens;
+    let resultU = true in
+    resultU
+
+  let approve (spender, tokens) =
+    allowances[msg_sender][spender] := tokens;
+    let resultU = true in
+    resultU
+
+  let transferFrom (fromA, toA, tokens) =
+    let from_bal = balances[fromA] in
+    let to_bal   = balances[toA] in
+    let allowed = allowances[fromA][toA] in
+    assert (fromA <> toA /\ from_bal >= tokens /\ allowed >= tokens);
+    balances[fromA] := from_bal-tokens;
+    balances[toA] := to_bal+tokens;
+    let resultU = true in
+    resultU
+}
+
+(* this AMM supports ERC20 tokens, ETH can be incorporated as WETH for trading *)
+object signature ConstantProductAMMInterface = {
+  constructor : unit -> unit;
+
+  coarsed simpleSwap0 : address -> int; (* transfer token0 to amm, results number of token1 swapped *)
+
+  (* router *)
+  (* swapTokensForExactTokens
+  swapExactTokensForTokens
+  addLiquidity (* why restrain the liquidity to not depreciating an asset too much? *)
+  removeLiquidity *)
+
+  (* fund management functions *)
+  coarsed mint : address -> unit; (* provide liquidity to this pair *)
+  coarsed burn : address -> unit; (* remove liquidity from this pair *)
+  
+  coarsed skim : address -> unit; (* arbitrage to force balances to match reserves *)
+  coarsed sync : unit -> unit; (* force reserves to match balances *)
+  k : unit -> int; (* get the constant product *)
+
+  (* oracles *)
+  (* we do not provide Uniswap V2 version of smoothed oracles at this moment *)
+  quote0 : int -> int; (* given some amount of an asset and pair reserves, returns an equivalent amount of the other asset *)
+  quote1 : int -> int;
+  getAmountOut0 : int -> int; (* given an input amount of an asset and pair reserves, returns the maximum output amount of the other asset *)
+  getAmountIn0 : int -> int; (* given an output amount of an asset and pair reserves, returns a required input amount of the other asset *)
+}
+
+(* assuming 0.3% txn fee, excluding the 0.05% additional fee in Uniswap V2 design *)
+(* we do not support liquidity tokens at the moment *)
+object ConstantProductAMM 
+  ( liquidityToken: ERC20Interface, 
+    erc20Token0: FixedERC20Interface, 
+    erc20Token1: FixedERC20Interface) : AMMInterface {
+
+  let _token0 : address := address(0xdac17f958d2ee523a2206206994597c13d831ec7) (* USDT *)
+  let _token1 : address := address(0x6b175474e89094c44da98b954eedeac495271d0f) (* DAI *)
+  let _owner : address := address(0x0)
+  let _reserve0 : int := 0
+  let _reserve1 : int := 0
+  let blockTimestampLast : int := 0 (* new oracle *)
+  let price0CumulativeLast : int := 0 (* new oracle *)
+  let price1CumulativeLast : int := 0 (* new oracle *)
+  let kLast : int := 0 (* reserve0 * reserve1, as of immediately after the most recent liquidity event *)
+
+  let constructor () =
+    _owner := msg_sender
+
+  (* transfer token0 and token1 to this contract, then mint liquidity tokens *)
+  let mint (toA) = 
+    let reserve0 = _reserve0 in
+    let reserve1 = _reserve1 in
+    let balance0 = erc20Token0.balanceOf(this_address) in
+    let balance1 = erc20Token1.balanceOf(this_address) in
+    let amount0 = balance0 - reserve0 in
+    let amount1 = balance1 - reserve1 in
+    (* update reserve 0 and reserve 1 *)
+    let totalSupply = liquidityToken.totalSupply() in
+    let liquidity = if totalSupply = 0 
+      then 
+        begin
+          liquidityToken.mint(address(0x0), 1000); (* lock the first liquidity tokens*)
+          amount0 * amount1 - 1000 (* in Uniswap this should be square-rooted *)
+        end
+      else
+        let l0 = amount0 * totalSupply / reserve0 in
+        let l1 = amount1 * totalSupply / reserve1 in
+        if l0 > l1 then l1 else l0
+    in
+    assert (liquidity > 0);
+    liquidityToken.mint(toA, liquidity);
+    _reserve0 := balance0;
+    _reserve1 := balance1
+
+  (* need toA first transfer liquidity tokens to this contract, then operate *)
+  (* it does not use ERC20 style allowances, just direct transfer *)
+  let burn (toA) = 
+    let reserve0 = _reserve0 in
+    let reserve1 = _reserve1 in
+    let balance0 = erc20Token0.balanceOf(this_address) in
+    let balance1 = erc20Token1.balanceOf(this_address) in
+    let liquidity = liquidityToken.balanceOf(this_address) in
+    let totalSupply = liquidityToken.totalSupply() in
+    let amount0 = liquidity * balance0 / totalSupply in
+    let amount1 = liquidity * balance1 / totalSupply in
+    assert (amount0 > 0 /\ amount1 > 0);
+    liquidityToken.burn(this_address, liquidity);
+    let success = erc20Token0.transfer(toA, amount0) in
+    assert (success);
+    let success = erc20Token1.transfer(toA, amount1) in
+    assert (success);
+    let balance0 = erc20Token0.balanceOf(this_address) in
+    let balance1 = erc20Token1.balanceOf(this_address) in
+    _reserve0 := balance0;
+    _reserve1 := balance1
+
+  (* adhere to the stanford paper formalization, targeted for vanilla proof *)
+  let simpleSwap0 (toA) = 
+    let reserve0 = _reserve0 in
+    let reserve1 = _reserve1 in
+    let balance0 = erc20Token0.balanceOf(this_address) in
+    let balance1 = erc20Token1.balanceOf(this_address) in
+    let amount0In = balance0 - reserve0 in
+    let token0 = _token0 in
+    let token1 = _token1 in
+    assert (toA <> token0 /\ toA <> token1);
+    assert (amount0In > 0);
+    assert (reserve0 > 0 /\ reserve1 > 0);
+    let amountInWithFee = amount0In * 997 in
+    let numerator = amountInWithFee * reserve1 in
+    let denominator = reserve0 * 1000 + amountInWithFee in
+    let result = numerator / denominator in
+    let success = erc20Token1.transfer(toA, result) in
+    assert (success);
+    let balance0 = erc20Token0.balanceOf(this_address) in
+    let balance1 = erc20Token1.balanceOf(this_address) in
+    _reserve0 := balance0;
+    _reserve1 := balance1;
+    let resultU = result in
+    resultU
+
+  let skim (toA) = 
+    let reserve0 = _reserve0 in
+    let reserve1 = _reserve1 in
+    let balance0 = erc20Token0.balanceOf(this_address) in
+    let balance1 = erc20Token1.balanceOf(this_address) in
+    let skim0 = balance0 - reserve0 in
+    let skim1 = balance1 - reserve1 in
+    let success = erc20Token0.transfer(toA, skim0) in
+    assert (success);
+    let success = erc20Token1.transfer(toA, skim1) in
+    assert (success)
+
+  let sync () = 
+    let balance0 = erc20Token0.balanceOf(this_address) in
+    let balance1 = erc20Token1.balanceOf(this_address) in
+    _reserve0 := balance0;
+    _reserve1 := balance1
+
+  let k () = 
+    let reserve0 = _reserve0 in
+    let reserve1 = _reserve1 in
+    let resultU = reserve0 * reserve1 in
+    resultU
+
+  (* Uniswap did not use Q112 library to do this computation *)
+
+  (* given amount0 of token0, the equivalent value in token1 *)
+  let quote0 (amount0) = 
+    assert (amount0 > 0);
+    let reserve0 = _reserve0 in
+    let reserve1 = _reserve1 in
+    assert (reserve0 > 0 /\ reserve1 > 0); (* prove that this can be dropped? *)
+    let resultU = amount0 * reserve1 / reserve0 in
+    resultU
+
+  let quote1 (amount1) = 
+    assert (amount1 > 0);
+    let reserve0 = _reserve0 in
+    let reserve1 = _reserve1 in
+    assert (reserve0 > 0 /\ reserve1 > 0); (* prove that this can be dropped? *)
+    let resultU = amount1 * reserve0 / reserve1 in
+    resultU
+
+  let getAmountOut0 (amount0In) = 
+    assert (amount0In > 0);
+    let reserve0 = _reserve0 in
+    let reserve1 = _reserve1 in
+    assert (reserve0 > 0 /\ reserve1 > 0);
+    let amountInWithFee = amount0In * 997 in
+    let numerator = amountInWithFee * reserve1 in
+    let denominator = reserve0 * 1000 + amountInWithFee in
+    let resultU = numerator / denominator in
+    resultU
+
+  let getAmountIn0 (amount0Out) =
+    assert (amount0Out > 0);
+    let reserve0 = _reserve0 in
+    let reserve1 = _reserve1 in
+    assert (reserve0 > 0 /\ reserve1 > 0);
+    let numerator = reserve1 * amount0Out * 1000 in
+    let denominator = (reserve0 - amount0Out) * 997 in
+    let resultU = (numerator / denominator) + 1 in
+    resultU
+}
+(*
+(* AMM Variant: Balancer *)
+object signature ValueFunctionAMMInterface = {
+  constructor : unit -> unit;
+}
+
+(* AMM Variant: Mooniswap *)
+object signature VirtualBalanceAMMInterface = {
+  constructor : unit -> unit;
+}
+*)
+(* Oracle Contract *)
+object signature OracleInterface = {
+  (* call amm's quote0 *)
+  getSpotPriceAccurate0 : int -> int;
+
+  getPrice0 : int;
+
+  (* Uniswap V2 type of oracle, time weighted *)
+  (* getUniswapAggregatedPrice : int -> int;
+
+  getRealPrice : int; *)
+}
+
+object Oracle (cpamm : ConstantProductAMMInterface) : OracleInterface {
+
+  let getSpotPriceAccurate0 (amount0) = 
+    let resultU = cpamm.quote0 (amount0) in
+    resultU
+
+  let getPrice0 () = 
+    let resultU = cpamm.quote0 (1) in
+      resultU
+
+}
+
+(* refers to compound, bzx, and aave, this includes liquidity mining for lending protocols *)
+object signature LendingInterface = {
+  constructor : unit -> unit;
+}
+
+object Lending (lliquidityToken: ERC20Interface, 
+    erc20Token0: FixedERC20Interface, 
+    erc20Token1: FixedERC20Interface,
+    cpamm : ConstantProductAMMInterface) : OracleInterface {
+
+  let _token0 : address := address(0xdac17f958d2ee523a2206206994597c13d831ec7) (* USDT *)
+  let _token1 : address := address(0x6b175474e89094c44da98b954eedeac495271d0f) (* DAI *)
+  let _reserve0 : int := 0 (* used to help track the balances that the user actually depositted *)
+  let _reserve1 : int := 0
+
+  let mint (toA) = 
+    let reserve0 = _reserve0 in
+    let reserve1 = _reserve1 in
+    let balance0 = erc20Token0.balanceOf(this_address) in
+    let balance1 = erc20Token1.balanceOf(this_address) in
+    let amount0 = balance0 - reserve0 in
+    let amount1 = balance1 - reserve1 in
+    (* update reserve 0 and reserve 1 *)
+    let totalSupply = liquidityToken.totalSupply() in
+    let l0 = amount0 * totalSupply / reserve0 in
+    let l1 = amount1 * totalSupply / reserve1 in
+    let liquidity = if l0 > l1 then l1 else l0 in
+    assert (liquidity > 0);
+    liquidityToken.mint(toA, liquidity);
+    _reserve0 := balance0;
+    _reserve1 := balance1
+
+  (* assumes liquidity tokens transferred here *)
+  let burn (toA) = 
+    let reserve0 = _reserve0 in
+    let reserve1 = _reserve1 in
+    let balance0 = erc20Token0.balanceOf(this_address) in
+    let balance1 = erc20Token1.balanceOf(this_address) in
+    let liquidity = liquidityToken.balanceOf(this_address) in
+    let totalSupply = liquidityToken.totalSupply() in
+    let amount0 = liquidity * balance0 / totalSupply in
+    let amount1 = liquidity * balance1 / totalSupply in
+    assert (amount0 > 0 /\ amount1 > 0);
+    liquidityToken.burn(this_address, liquidity);
+    let success = erc20Token0.transfer(toA, amount0) in
+    assert (success);
+    let success = erc20Token1.transfer(toA, amount1) in
+    assert (success);
+    let balance0 = erc20Token0.balanceOf(this_address) in
+    let balance1 = erc20Token1.balanceOf(this_address) in
+    _reserve0 := balance0;
+    _reserve1 := balance1
+
+  let clearWaitlist () =
+
+  let checkLiquidation () = 
+
+  let 
+(*
+  // WEI_PRECISION: multiply everything to increase precision
+
+	// function mint (address receiver, uint256 depositAmount) -> 
+	//  give you interest bearing tokens (deposit 100 USDT, you get 100 iUSDT which will represent you share of the pool), 
+	//	need approval from sender first so can transfer user USDT to contract pool
+
+	// function burn (address receiver, uint256 burnAmount) -> 
+	//  burn your iTokens, gives you balance[iUSDT] / getTotalSupply(iUSDT) amount of the USDT liquidity pool, 
+	//  if the does not have enough liquidity (unborrowed loans), put on a waitlist
+
+	// function clearWaitlist () private -> automatically paid back as liquidity becomes freed from borrowers, 
+	//  when borrowers close their positions or a position gets liquidated.
+
+	// function checkLiquidation (address loanToken, address collateralToken, uint256 loanAmount, uint256 collateralAmount) private ->
+	// 	check if the current margin is larger than the maintainance margin
+	//  e.g., USDC collateral to borrow USDT, then 
+	//  currentMargin = BorrowedUSDTAmount * (1 + interestRate[USDT]) / USDCCollateralAmount * oracleRate(USDC, USDT, USDCCollateralAmount)
+	//  maintainanceMargin = collaterizationRatio[USDC, USDT]
+	//  currentMargin <= maintainanceMargin
+
+	// function borrow (address receiver, address collateralToken, address loanToken, uint256 loanAmount) -> 
+	// 	simplify by using non-compounding interest rates and long loan periods
+	//  need aproval from sender first, check the fixed interest rates, check the oracle
+	//  transfer user USDC to contract pool, then give receiver USDCAmount * oracleRate(USDC, USDT, USDCAmount) / (1 + interestRate[USDT])
+	//  = USDTAmount of USDT
+
+	// function borrowTrusted () private -> this is for loans created by trusted parties, like DEX, tehy are given higher leverages and 
+
+	// function closeBorrow (address receiver, address collateralToken, address loanToken, uint256 loanAmount) ->
+	//  need approval from sender first, then transfer the borrowed USDT from receiver to platform, => calls clearWaitlist
+	// 	gives back USDC, that USDCAmount = USDCCollateralAmount -  USDTAmount * (1 + interestRate[USDT]) * oracleRate(USDT, USDC, USDTAmount)
+	//  so after this, the amount of USDC in pool should be larger (this is an invariant to prove)
+
+	// function liquidatePosition (uint256 loanId) private -> 
+	//  if checkLiquidation is true, then we sell the loan to repay the lending pool liquidity providers => calls clearWaitlist
+	//  e.g., USDC -> USDT loan should be liquidated, call any AMM's swap function to swap all the collaterized USDC to USDT, 
+	//  and transfer the swapped USDT to the pool
+*)
+}
+
+(* refers to bzx and other popular dex *)
+object signature MarginDEXInterface = {
+  constructor : unit -> unit;
+(*
+  // actual margin trading, use lending and amm
+
+	// function openShort (address trader, address positionToken, uint256 leverage)
+	// can only open position on token the same type as collateral token
+	// we are essentially lending ETH to user (which is another liability, and limits the liquidity) 
+	// if we do not change the liquidation and borrwoing interface in `Lending`, so need to change borrow function
+	//  For short positions, such as 2x short ETH, the pToken borrows from the iETH token, then swaps that ETH for a stable asset (DAI) on KyberSwap. 
+	//  need approval from sender first, send the specified collateral token amount to this contract, e.g. ETH, then if he wants to short ETH 2x, 
+	//  we calculate the amountInETH = oraclePrice(DAI, ETH) * amountInDAI, then we borrow levarage * amountInETH, swap those ETH to DAI, then move the
+	//  swapped DAI to this contract. 
+
+
+	// Required Margin = Trade Size / Leverage * Account Currency Exchange Rate
+	// use DAI as collateral to margin trade ETH: amountDAIIn * leverage * oracleRate(DAI, ETH, amountDAIIn) = amountETHToTrade
+	// borrows asset by using the assets you already have as collateral
+	// 1 ETH = 100 DAI, 2x short, if use 1 ETH as collateral, then swap 1 ETH to 100 DAI, then use 100 DAI as collateral to borrow 1 ETH, then 
+	//  swap this new 1 ETH to 100 DAI. So now you have 100 DAI in the account
+	//  1. if 1 ETH = 50 DAI, then upon close buy 2 ETH, then repay the borrowed 1 ETH, then you get another 100 DAI (original collateral), then 
+	//   buy another 2 ETH, so now you have 3 ETH in account
+	//     if 1 ETH = 1 DAI, then upon close buy 100 ETH, repay 1 ETH loan, then you get another 100 DAI (original collateral), then buy
+	//     another 100 ETH, so now you have 199 ETH in account
+	//  2. if 1 ETH >= 200 DAI, then buy 0.5 ETH, --> 
+
+	// 1 ETH, 2x short
+	// 100 DAI
+	// 1 ETH, 100 DAI locked for 1 ETH (liquidate when ETH > 100 DAI)
+	// 100 DAI, 100 DAI locked for 1 ETH
+
+	// 1/5 leverage, have 0 ETH when ETH >= 500 DAI
+	// 0.2 ETH, 100 DAI locked for (100/100/5=0.2) ETH (liquidate when ETH > 500 DAI)
+	// 4 DAI, 20 DAI locked for (20/100/5=0.04) ETH + 100 DAI locked for (100/100/5=0.2) ETH (liquidate when ETH > 500 DAI)
+	// if 1/2 price (ETH = 50 DAI), then 4/50 + 20/50 + 100/50 - 0.04 - 0.2 = 124/50 - 0.24 = 2.24 ETH, take limit, get 2.25 ETH
+	// taken limit, if price = p, then 125 - 0.25 * p = profitInDAI, so if p = 100, we have 1 ETH, unchanged, p = 200, we have 0.375 ETH left, 
+	//  p = 500, we have 0 ETH left
+
+	// 1/2 leverage, have 0 ETH when ETH >= 200 DAI
+	// lock 100 DAI for 0.5 ETH (loan price = liquidateion price)
+	// taken limit, if price = p, then 200/p - 1 = profit
+
+	// 	Pi = initial price, l = leverage, Pl = liquidation price = Pi + Pi/l, P = realTimePrice
+	//  Pi + Pi * \Sigma_{i=1 to infinity}{(1/(1+l))^i} - P * \Sigma_{i=1 to infinity}{(1/(1+l))^i} = return * Pi
+	// 	Pi + \Sigma_{i=1 to infinity}{(1/(1+l))^i} * (Pi - P) = return * Pi
+	//  if l > 0, then:
+	//  Pi + (Pi - P) / l = return * Pi
+
+	// taking an over-collaterized loan is adding 1/x leverage
+
+	// endDAI / p - endETH = profit
+
+	// endDAI / 150 - endETH - 0
+
+	// 5 leverage, have 0 ETH when ETH >= 120 DAI
+	// lock 100 DAI for 100/120 ETH
+	// sell 100/120 ETH for 100*100/120 DAI, then lock 100*100/120 DAI for (100/120)^2 ETH, 
+	// sell (100/120)^2 ETH for 100*(100/120)^2 DAI, then lock 100*(100/120)^2 DAI for (100/120)^3 ETH
+	// so in the end have position of: 
+	//  100 + 100*100/120 + 100*(100/120)^2 + .... - ((100/120) + (100/120)^2 + ...) * p = profitInDAI
+	//  test: 100 + 100*100/120 - 120 * ((100/120) + (100/120)^2) = 0
+
+	//  100 + (100 - P) * 2 = return * 100
+
+	// 100 DAI, short ETH, 100x leverage, liquidation price is 101
+	//  equivalent to use 100 DAI as collateral to borrow 100 ETH, sell for 10000 DAI, then if ETH = 50 DAI, 
+	//  get 200 ETH, repay borrowed 100 ETH, get 100 ETH remaining, which is 5000 DAI profit
+	//  the maximum price he can stand is ETH = 101 DAI, by which time he can use 10000 DAI + collateral to buy 100 ETH to repay loan
+	//   ----> so essentially this is taking an under-collaterized loan, which require priviledged actions to `Lending`, which we did not implement
+	//   ----> bZx also implement this with specialized loan functions
+
+	// Pi / Pl = 1/(1+l)
+
+	// 2 leverage, have 0 ETH when ETH >= 150 DAI
+
+    // infinite leverage, have 0 ETH when ETH >= 100 DAI
+	
+	// 0.5 ETH, 100 DAI locked for 0.5 ETH
+	// 50 DAI, 100 DAI locked for 0.5 ETH (liquidate when ETH > 200 DAI)
+	// 0.25 ETH, 50 DAI locked for 0.25 ETH + 100 DAI locked for 0.5 ETH (liquidate when ETH > 200 DAI)
+	// 25 DAI, 150 DAI locked for 0.75 ETH (liquidate when ETH > 200 DAI)
+	//  ---> you can force liquidate your loan positions, and have your 25 DAI, 
+	//       if ETH = 150 DAI, then you get 25 / 150 + 50 / 150 + 100 / 150 - 0.25 - 0.5 = 175/150 - 75/100 ~~ 0.416 ETH
+	//       take limit, you get 200/150 - 1 ~~ 0.33 ETH
+
+	// 12.5 DAI, 175 DAI locked for 0.875 ETH (liquidate when ETH > 200 DAI)
+	// 100/16 DAI, 200-(100/8) DAI locked for 1-(1/16) ETH (liquidate when ETH > 200 DAI)
+	// take limit: 100/1024 DAI, 200 - (100/512) DAI locked for 1-(1/1024) ETH (liquidate when ETH > 200 DAI)
+
+	// with 2 loans: 1/2 price, have 2.75 (3 - 1/2^2), 2 price, have 0.125 (1/2^(1+2))
+	// with n loans: 1/2 price, have (3 - 1/2^n), 2 price, have (1/2^(1+n))
+	// take limit, 1/2 price, have ~~ 3 ETH, 2 price, have ~~ 0 ETH
+	// when ETH = 50 DAI, then 25 DAI buy 0.5 ETH, repay 0.25 ETH loan, get back 50 DAI, buy 1 ETH, 
+	// now have 1.25 ETH, repay 0.5 ETH loan, get back 100 DAI, swap for 2 ETH, now have 2.75 ETH with no unpaid loans
+
+	// when ETH = 200 DAI, then all loans are liquidated, with 25 DAI left, which is 0.125 ETH with no unpaid loans
+
+	// if with DAI as collateral, then 200 DAI in total
+	//  1. if 1 ETH = 50 DAI, then upon close, buy 
+
+	// oraclePrice is the mark price
+	//  1. If we see oraclePrice(DAI, ETH) * amountPositionDAI / oraclePrice(DAI, ETH) * amountInDAI >= leverage, we need to
+	//  liquidate the whole position (that is, to swap DAI back to ETH and repay the borrowed ETH, so need to consider closeBorrow & swap txn fees)
+	//  2. If we see oraclePrice(DAI, ETH) * amountPositionDAI / oraclePrice(USDC, ETH) * amountInUSDC < leverage and user closed position,
+	//  we liquidate the whole position (swap DAI to ETH, repay ETH loan, and then swap ETH to USDC, send this remaining USDC to user)
+
+	// function openLong ()
+	//  For long positions, such as 2x long ETH, the pToken borrows from a stable asset, iDAI, and swaps that for ETH on KyberSwap.
+
+	// function closeLong ()
+
+	// function closeShort ()
+
+	// fucntion liquidationPrice () private -> 
+
+  // function liquidatePosition () private -> 
+  *)
+}
+
+(*
+(* refers to Synthetix and bucketshop-ish dex *)
+object signature GambleDEXInterface = {
+  constructor : unit -> unit;
+}
+
+(* refers to harvest.finance & YFI *)
+object signature AggregatorInterface = {
+  constructor : unit -> unit;
+
+  totalAsset : address -> int; (* calculate the hacker's total liquidatable asset *)
+}
+*)
+
+layer signature AMMLibSig = {
+  erc20Token0 : FixedERC20Interface;
+  erc20Token1 : FixedERC20Interface;
+  liquidityToken : ERC20Interface;
+  helper : AMMLibInterface;
+}
+
+layer AMMLIB : [{}] AMMLibSig = {
+  erc20Token0 = address(0x10033) <: FixedSupplyToken;
+  erc20Token1 = address(0x10032) <: (clone FixedSupplyToken); (* cloned an object *)
+  liquidityToken = address(0x10031) <: LiquidityToken;
+  helper = AutomatedMarketMakerLib; (* does not update me sem if no addr linked *)
+}
+
+layer signature AMMSig = {
+  amm : AMMInterface
+}
+
+layer AMM : [AMMLibSig] AMMSig = {
+  amm = address(0x10030) <: AutomatedMarketMaker
+}
+
+layer COMPLETE = AMM @ AMMLIB

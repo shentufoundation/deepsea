@@ -1,0 +1,218 @@
+(* second-price sealed-blind auction *)
+
+type Bid = {
+    _blindedBid : hashvalue;
+    _deposit : uint;
+}
+
+type Transfer = {
+    _amount : uint;
+    _to : uint;
+}
+
+(* external, linking with Coq? *)
+external let transfer_nil [[unfold always]] : list Transfer = "nil"
+external let transfer_cons [[unfold always]] : Transfer * (list Transfer) -> (list Transfer) = "(fun a b => (cons a b))"
+external let transfer_length [[unfold always]] : (list Transfer) -> int = "(fun l => Z_of_nat (length l))"
+
+(* external implementation of transfer since struct cannot be let-binded *)
+external let transfer_cons_unzip [[unfold always]] : uint * address * (list Transfer) -> (list Transfer) = "(fun toaddr much e => {| _amount := much; _to := toaddr|} :: e)"
+
+(* event AuctionEnded (winner : address indexed) (highestBid : uint) *)
+
+object signature EVMOpcodeInterface = {
+    transfer : address * uint -> unit;
+}
+
+object signature BlindAuctionInterface = {
+    initialize : uint * uint -> unit;
+    bid : hashvalue -> unit;
+    transferb : address * address * uint -> unit;
+    reveal : uint * hashvalue -> unit;
+    withdraw : unit -> unit;
+    auctionEnd : unit -> unit;
+}
+
+(*  make it have an actual list variable (this would be a coq list, since we are not generating code), and what the function would do would be to cons one more item to the list, recording that a transfer happened. *)
+
+trusted object EVMOpcode : EVMOpcodeInterface {
+    let _events : list Transfer := transfer_nil
+
+    let transfer (toaddr, much) =
+        let e = _events in
+        _events := transfer_cons_unzip (much, toaddr, e);
+        ()
+}
+
+object BlindAuction (evm: EVMOpcodeInterface) : BlindAuctionInterface {
+    (* initial values *)
+    let _beneficiary : address := address(0u0)
+    let _biddingEnd : uint := 0u0
+    let _revealEnd : uint := 0u0
+    let _ended : bool := false
+    let _bids : mapping[address] Bid := mapping_init
+    let _highestBidder : address := address(0u0)
+    let _highestBid : uint := 0u0
+    let _secondBid : uint := 0u0
+    let _revealed : mapping[address] bool := mapping_init
+    let _amountOf : mapping[address] uint := mapping_init
+
+    (* placeholder for constructor *)
+    let initialize (biddingTime, revealTime) =
+        _beneficiary := msg_sender;
+        _biddingEnd := block_number + biddingTime;
+        _revealEnd := block_number + biddingTime + revealTime;
+        let beneficiary = _beneficiary in
+        _highestBidder := beneficiary;
+        _revealed [beneficiary] := true;
+        ()
+
+    let transferb (fromaddr, toaddr, amount) =
+        let base = _amountOf [toaddr] in
+        _amountOf [toaddr] := base + amount;
+        let base = _amountOf [fromaddr] in
+        _amountOf [fromaddr] := base - amount;
+        ()
+
+    (* Reveal your blinded bids. You will get a refund for all
+       correctly blinded invalid bids and for all bids except for
+       the totally highest.
+     *)
+    let reveal (value, secret) =
+        let biddingEnd = _biddingEnd in
+        let revealEnd = _revealEnd in
+        assert (block_number > biddingEnd);
+        assert (block_number < revealEnd);
+
+        let hashed = keccak256 (value, secret) in
+        let blindedBid = _bids[msg_sender]._blindedBid in
+        let deposit = _bids[msg_sender]._deposit in
+
+        let revealedp = _revealed[msg_sender] in
+        assert (!revealedp);
+        _revealed[msg_sender] := true;
+        
+        if hashed = blindedBid
+        then 
+            let beneficiary = _beneficiary in
+            if value > deposit
+            then 
+                ()
+            else
+                let highestBid = _highestBid in
+                if value >= highestBid
+                then
+                    let highestBidder = _highestBidder in
+                    let secondBid = _secondBid in
+                    (* transferb (beneficiary, highestBidder, secondBid); *)
+                    let base = _amountOf [highestBidder] in
+                    _amountOf [highestBidder] := base + secondBid;
+                    let base = _amountOf [beneficiary] in
+                    _amountOf [beneficiary] := base - secondBid;
+
+                    _secondBid := highestBid;
+                    _highestBid := value;
+                    _highestBidder := msg_sender;
+                    let highestBidder = _highestBidder in
+                    let secondBid = _secondBid in
+                    (*  transferb (highestBidder, beneficiary, secondBid); *)
+                    let base = _amountOf [beneficiary] in
+                    _amountOf [beneficiary] := base + secondBid;
+                    let base = _amountOf [highestBidder] in
+                    _amountOf [highestBidder] := base - secondBid;
+
+                    ()
+                else 
+                    let secondBid = _secondBid in
+                    if value > secondBid
+                    then
+                        let highestBidder = _highestBidder in
+                        (* transferb (beneficiary, highestBidder, secondBid); *)
+                        let base = _amountOf [highestBidder] in
+                        _amountOf [highestBidder] := base + secondBid;
+                        let base = _amountOf [beneficiary] in
+                        _amountOf [beneficiary] := base - secondBid;
+
+                        _secondBid := value;
+                        let secondBid = _secondBid in
+                        (* transferb (highestBidder, beneficiary, secondBid); *)
+                        let base = _amountOf [beneficiary] in
+                        _amountOf [beneficiary] := base + secondBid;
+                        let base = _amountOf [highestBidder] in
+                        _amountOf [highestBidder] := base - secondBid;
+
+                        ()
+                    else
+                        ()
+        else
+            ()
+
+    (* Place a blinded bid with `blindedBid` = keccak256(value, secret).
+       Each person transfer their capital proof (an amount of ether larger
+       than the price of the auction object), they can transfer more ether or 
+       many times to hide their true bid. 
+     *)
+  let bid blindedBid =
+        let biddingEnd = _biddingEnd in
+        let beneficiary = _beneficiary in
+        assert (block_number < biddingEnd);
+        assert (msg_sender <> beneficiary);
+
+        let old_deposit = _bids[msg_sender]._deposit in
+        if old_deposit <> 0u0 
+        then
+            begin
+                _bids[msg_sender]._blindedBid := blindedBid;
+                _bids[msg_sender]._deposit := msg_value;
+                _amountOf[msg_sender]  := msg_value;
+                evm.transfer (msg_sender, old_deposit);
+                ()
+            end
+        else
+            _bids[msg_sender] := {_blindedBid = blindedBid; _deposit = msg_value}; 
+            ()
+	  
+    (* Withdraw a bid that was overbid. *)
+    let withdraw () = 
+        let revealEnd = _revealEnd in
+        let ended = _ended in
+        assert (block_number > revealEnd);
+        assert (! ended);
+
+        let amount = _amountOf[msg_sender] in
+        _amountOf[msg_sender] := 0u0;
+        (* In order to avoid a re-entrency attack, the transfer happens last. *)
+        evm.transfer (msg_sender, amount);
+        ()
+
+    (* End the auction and send the highest bid to the beneficiary. *)
+    let auctionEnd () = 
+        let revealEnd = _revealEnd in
+        let ended = _ended in
+        assert (block_number > revealEnd);
+        assert (! ended);
+        (* emit AuctionEnded(_highestBidder, _highestBid); *)
+        _ended := true;
+        let beneficiary = _beneficiary in
+        let highestBid = _highestBid in
+        evm.transfer (beneficiary, highestBid); 
+        ()    
+}
+
+layer signature BLINDAUCTIONSig = {
+    blindauction : BlindAuctionInterface
+}
+
+layer signature EVMOPCODESig = {
+    evm : EVMOpcodeInterface
+}
+
+layer EVMOPCODE : [{}] EVMOPCODESig = {
+    evm = EVMOpcode
+}
+
+layer BLINDAUCTION : [EVMOPCODESig] BLINDAUCTIONSig = {
+  blindauction = BlindAuction
+}
+
+layer COMPLETE = BLINDAUCTION @ EVMOPCODE

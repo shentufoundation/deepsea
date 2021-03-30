@@ -1,0 +1,47 @@
+object signature LowerInterface = {
+  incr : unit -> unit; 
+  const get : unit -> int
+}
+
+object Lower : LowerInterface {
+  let n : int := 0 
+
+  let incr () =
+    let _n = n in
+    n := _n + 1 
+
+  let get () =
+    let _n = n in
+    _n
+
+}
+
+layer LOWER : [ { } ] { lower : LowerInterface }  = {
+  lower = Lower
+}
+
+object signature UpperInterface = {
+  f : unit -> int;
+  const get : unit -> int
+}
+
+object Upper (lower : LowerInterface) : UpperInterface  {
+  let f () =
+    lower.incr();
+    lower.incr(); 
+    let n = lower.get() in
+    assert (n = 2);
+    n
+
+  let get() =
+    lower.get()
+
+}
+
+layer UPPER : [{ lower : LowerInterface }]
+    { upper : UpperInterface    }
+= {
+  upper = Upper
+}
+
+layer CONTRACT = UPPER @ LOWER

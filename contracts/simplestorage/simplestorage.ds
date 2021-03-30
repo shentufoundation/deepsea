@@ -1,0 +1,23 @@
+object signature SimpleStorageInterface = {
+  get : unit -> uint;
+  set : uint -> unit
+}
+
+object SimpleStorage : SimpleStorageInterface {
+  let _val : uint := 0u1234
+
+  let get () =
+    let val = _val in
+    val
+
+  let set x =
+    _val := x
+}
+    
+layer signature SIMPLESTORAGECONTRACTSig = {
+  simpleStorage : SimpleStorageInterface
+}
+
+layer SIMPLESTORAGECONTRACT : [{}] SIMPLESTORAGECONTRACTSig = {
+  simpleStorage = SimpleStorage
+}

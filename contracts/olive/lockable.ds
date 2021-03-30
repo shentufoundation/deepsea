@@ -1,0 +1,50 @@
+event
+  | Transfer (from : address indexed) (to_ : address indexed) (value : uint)
+  | Approval (owner : address indexed) (spender_ : address indexed) (value : uint)
+
+(* we cannot have "to" which is a token that could cause parse error; need to mention in reference *)
+
+object signature ERC20Interface = {
+  constructor : unit -> unit;
+  balanceOf : address -> uint;
+  transfer : address * uint -> bool;
+
+  allowance : address * address -> uint 
+}
+
+object Token : ERC20Interface {
+  let _totalSupply : uint := 0u10000000000
+  let _balances : mapping[address] uint := mapping_init
+  let _allowed : mapping [address] mapping[address] uint := mapping_init
+
+  let constructor () =
+    let a = _totalSupply in
+      _balances[msg_sender] := a
+
+  let balanceOf addr =
+    _balances[addr]
+
+  let transfer (to_, value) =
+    (* lockable.lockCheck(msg_sender, value);
+    pausable.whenNotPaused(); *)
+    let sender_bal = _balances[msg_sender] in
+      let receiver_bal = _balances[to_] in
+    assert(to_ <> address(0));
+    assert(value <= sender_bal);
+    assert (sender_bal >= value);
+    _balances[msg_sender] := sender_bal - value;
+    (* todo: add suitable overflow assertion here. *)
+    _balances[to_] := receiver_bal + value;
+    emit Transfer(msg_sender, to_, value);
+    true
+
+  let allowance (owner, spender)  =
+    let res = _allowed[owner][spender] in
+    res
+
+}
+
+layer L = {
+  o = Token
+}
+

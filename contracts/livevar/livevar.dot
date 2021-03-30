@@ -1,0 +1,16 @@
+digraph mygraph {
+  node [shape=box];
+
+  "entry"
+  "entry" -> "5"
+"4 : tempvar_1 = 0x00"
+"4 : tempvar_1 = 0x00" -> "3 : return "
+"2 : revert "
+
+"1 : done "
+
+"5 : tempvar_1 = (binop @ tempvar_7 tempvar_f)"
+"5 : tempvar_1 = (binop @ tempvar_7 tempvar_f)" -> "4 : tempvar_1 = 0x00"
+"3 : return "
+"3 : return " -> "1 : done "
+}

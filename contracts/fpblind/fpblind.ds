@@ -1,0 +1,197 @@
+(* first-price sealed-blind auction *)
+
+(* Hacks
+   - function arguments are tuples, no currying, I think this should be made explicit, I know manual mentioned no higher order functions, but when I wrote function types I always forgot
+   - should implement dynamic array library, but since no polymorphism this is not very easy (no support for user-defined named records, Vilhelm suggested to do this as pre-processing meta-programming
+   - explicit distinction of RValue and LValue
+   - since there is a distinction between RValue and LValue, we cannot access the field of a record in a mapping that is wrapped in a record. no hack is possible. Moreover, writing let-bindings for LValues is tedious
+   - side effect is currently done with let _ = ... in
+   - I (Xinyuan) personally think parentheses () are better than begin ... end, they are clearer, and not much burden adding them
+   - local call by reference variable would be convinient
+   - strust cannot be let-binded
+*)
+
+type addr := uint
+
+type Bid = {
+    _blindedBid : hashvalue;
+    _deposit : uint;
+}
+
+type Transfer = {
+    _amount : uint;
+    _to : uint;
+}
+
+(* external, linking with Coq? *)
+external let transfer_nil [[unfold always]] : list Transfer = "nil"
+external let transfer_cons [[unfold always]] : Transfer * (list Transfer) -> (list Transfer) = "(fun a b => (cons a b))"
+external let transfer_length [[unfold always]] : (list Transfer) -> int = "(fun l => Z_of_nat (length l))"
+
+(* external implementation of transfer since struct cannot be let-binded *)
+external let transfer_cons_unzip [[unfold always]] : uint * uint * (list Transfer) -> (list Transfer) = "(fun toaddr much e => {| _amount := much; _to := toaddr|} :: e)"
+
+(* event AuctionEnded (winner : addr indexed) (highestBid : uint) *)
+
+object signature EVMOpcodeInterface = {
+    transfer : addr * uint -> unit;
+}
+
+object signature BlindAuctionInterface = {
+    initialize : uint * uint -> unit;
+    bid : hashvalue -> unit;
+    reveal : uint * hashvalue -> unit;
+    withdraw : unit -> unit;
+    auctionEnd : unit -> unit;
+}
+
+(*  make it have an actual list variable (this would be a coq list, since we are not generating code), and what the function would do would be to cons one more item to the list, recording that a transfer happened. *)
+
+trusted object EVMOpcode : EVMOpcodeInterface {
+    let _events : list Transfer := transfer_nil
+
+    let transfer (toaddr, much) =
+        let e = _events in
+        _events := transfer_cons_unzip (much, toaddr, e);
+        ()
+}
+
+object BlindAuction (evm: EVMOpcodeInterface) : BlindAuctionInterface {
+    (* initial values *)
+    let _beneficiary : addr := 0u0
+    let _biddingEnd : uint := 0u0
+    let _revealEnd : uint := 0u0
+    let _ended : bool := false
+    let _bids : mapping[addr] Bid := mapping_init
+    let _highestBidder : addr := 0u0
+    let _highestBid : uint := 0u0
+    let _pendingReturns : mapping[addr] uint := mapping_init
+    (* for proof assumptions, or else has to assume inverse hash function existence *)
+    let _trueBids : mapping[addr] uint := mapping_init
+    let _secrets : mapping[addr] hashvalue := mapping_init
+
+    (* placeholder for constructor *)
+    let initialize (biddingTime, revealTime) =
+        _beneficiary := msg_sender;
+        _biddingEnd := block_number + biddingTime;
+        _revealEnd := block_number + biddingTime + revealTime;
+        ()
+
+    (* Reveal your blinded bids. You will get a refund for all
+       correctly blinded invalid bids and for all bids except for
+       the totally highest.
+     *)
+    let reveal (value, secret) =
+        let biddingEnd = _biddingEnd in
+        let revealEnd = _revealEnd in
+        assert (block_number > biddingEnd);
+        assert (block_number < revealEnd);
+
+        let hashed = keccak256 (value, secret) in
+        let blindedBid = _bids[msg_sender]._blindedBid in
+        let deposit = _bids[msg_sender]._deposit in
+        _trueBids[msg_sender] := value;
+        _secrets[msg_sender] := secret;
+        let refund = 
+            if hashed = blindedBid
+            then 
+                let loc_refund = 
+                    if deposit >= value 
+                    then 
+                        let highestBid = _highestBid in
+                        let highestBidder = _highestBidder in
+                        if value <= highestBid 
+                        then
+                            deposit
+                        else
+                            begin
+                                let _ = 
+                                    if highestBid > 0u0 
+                                    then
+                                        begin
+                                            (* refund previous highest bidder *)
+                                            _pendingReturns[highestBidder] := highestBid; 
+                                            ()
+                                        end
+                                    else 
+                                        ()
+                                in
+                                (* bid successful, only refund excess deposit *)
+                                _highestBid := value;
+                                _highestBidder := msg_sender;
+                                deposit - value
+                            end
+                    else
+                        deposit
+                in
+                (* Make it impossible for the sender to re-claim the same deposit*)
+                _bids[msg_sender]._blindedBid := keccak256(0u0);
+                loc_refund
+            else
+                0u0
+        in
+        evm.transfer (msg_sender, refund); ()
+
+    (* Place a blinded bid with `blindedBid` = keccak256(value, secret).
+       Each person transfer their capital proof (an amount of ether larger
+       than the price of the auction object), they can transfer more ether or 
+       many times to hide their true bid. 
+     *)
+    let bid blindedBid = 
+        let biddingEnd = _biddingEnd in
+        assert (block_number < biddingEnd);
+        let old_deposit = _bids[msg_sender]._deposit in
+        if old_deposit <> 0u0 
+        then
+            begin
+                _bids[msg_sender]._blindedBid := blindedBid;
+                _bids[msg_sender]._deposit := msg_value;
+                evm.transfer (msg_sender, old_deposit); 
+                ()
+            end
+        else
+            _bids[msg_sender] := {_blindedBid = blindedBid; _deposit = msg_value}; 
+            ()
+
+    (* Withdraw a bid that was overbid. *)
+    let withdraw () = 
+        let amount = _pendingReturns[msg_sender] in
+        if amount > 0u0 then
+            begin
+                (* re-entrency attack *)
+                _pendingReturns[msg_sender] := 0u0;
+                evm.transfer (msg_sender, amount); ()
+            end
+        else 
+        ()
+
+    (* End the auction and send the highest bid to the beneficiary. *)
+    let auctionEnd () = 
+        let revealEnd = _revealEnd in
+        let ended = _ended in
+        assert (block_number > revealEnd);
+        assert (! ended);
+        (* emit AuctionEnded(_highestBidder, _highestBid); *)
+        _ended := true;
+        let beneficiary = _beneficiary in
+        let highestBid = _highestBid in
+        evm.transfer (beneficiary, highestBid); ()    
+}
+
+layer signature BLINDAUCTIONSig = {
+    blindauction : BlindAuctionInterface
+}
+
+layer signature EVMOPCODESig = {
+    evm : EVMOpcodeInterface
+}
+
+layer EVMOPCODE : [{}] EVMOPCODESig = {
+    evm = EVMOpcode
+}
+
+layer BLINDAUCTION : [EVMOPCODESig] BLINDAUCTIONSig = {
+  blindauction = BlindAuction
+}
+
+layer COMPLETE = BLINDAUCTION @ EVMOPCODE

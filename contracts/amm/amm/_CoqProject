@@ -1,0 +1,12 @@
+-R ../../.. DeepSpec
+-R . amm
+./EdsgerIdents.v
+./DataTypes.v
+./DataTypeOps.v
+./DataTypeProofs.v
+./LayerAMMLIB.v
+./LayerAMM.v
+./ObjFixedSupplyTokenCodeProofs.v
+./ObjFixedSupplyToken1CodeProofs.v
+./ObjLiquidityTokenCodeProofs.v
+./ObjAutomatedMarketMakerCodeProofs.v

@@ -95,7 +95,7 @@ class Interface {
             'getTxOrigin',
             'getBlockCoinbase',
             'getBlockDifficulty',
-            'returnDataSize',
+            'getReturnDataSize',
             'getExternalBalance',
             'getAddress',
         ];
@@ -242,7 +242,7 @@ class Interface {
     }
     call(gas, addressOffset, valueOffset, dataOffset, dataLength) {
         console.log(`call(${gas}, ${addressOffset}, ${valueOffset}, ${dataOffset}, ${dataLength})`);
-        const addressInHex = '0x' + utils.toHex(this.getMemory(addressOffset, 20));
+        const addressInHex = '0x' + utils.toLEHex(this.getMemory(addressOffset, 20));
         const address = utils.toBigInt(addressInHex);
         const value = utils.toBigInt('0x' + utils.toHex(this.getMemory(valueOffset, 16))).toString(16);
         const data = this.getMemory(dataOffset, dataLength);
@@ -252,6 +252,7 @@ class Interface {
         switch (address) {
             case BigInt(2): // Sha256
             case BigInt(9): // Keccak256
+                // console.log(`{ address: ${addressInHex}, yayyyyy`);
                 vm = precompiled.keccak256;
                 // ethers.utils.keccak256()
                 break;
@@ -284,8 +285,8 @@ class Interface {
         this.env.returnData = vm.env.returnData;
         return 0;
     }
-    returnDataSize() {
-        console.log(`returnDataSize()`);
+    getReturnDataSize() {
+        console.log(`getReturnDataSize()`);
         this.takeGas(2);
         console.log(`{ size: ${this.env.returnData.length} }`);
         return this.env.returnData.length;

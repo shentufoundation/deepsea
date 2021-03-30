@@ -47,7 +47,7 @@ Proof.
   unfold balances_sum.
   subst.
   autorewrite with updates.
-  remember (FixedSupplyToken_balances m2) as m.
+  remember (balances m2) as m.
   rewrite Int256Tree_Properties.sum_swap by congruence.
   apply Int256Tree_Properties.constant_sum'.
     + reflexivity.
@@ -70,7 +70,7 @@ Proof.
   unfold balances_sum.
   subst.
   autorewrite with updates.
-  remember (FixedSupplyToken_balances m2) as m.
+  remember (balances m2) as m.
   rewrite Int256Tree_Properties.sum_swap by congruence.
   apply Int256Tree_Properties.constant_sum'.
     + reflexivity.

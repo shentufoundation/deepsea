@@ -1,0 +1,427 @@
+(* atomic cross-chain swaps - general case *)
+
+type addr := uint 
+type timeunit := uint (* in seconds? *)
+
+type Transfer = {
+	_amount : uint;
+	_to : addr; 
+}
+
+external let transfer_nil [[unfold always]] : list Transfer = "nil"
+external let transfer_cons [[unfold always]] : Transfer * (list Transfer) -> (list Transfer) = "(fun a b => (cons a b))"
+external let transfer_length [[unfold always]] : (list Transfer) -> uint = "(fun l => Z_of_nat (length l))"
+external let transfer_cons_unzip [[unfold always]] : uint * uint * (list Transfer) -> (list Transfer) = 
+		"(fun toaddr much e => {|_amount := much; _to := toaddr |} :: e)"
+
+(* static global graph information *)
+const numLeaders = 0u1
+const numLeadersInt = 1
+const numParties = 0u3
+const numPartiesInt = 3
+const diam = 0u3
+const maxIncomingEdges = 1
+const maxOutgoingEdges = 1
+
+
+(* 	These are graph related external functions etc, not used in the current version;
+	We might have to use these if fixed-sized arrays are very hard to prove things about
+	compared to linked lists that are changing structurally. *)
+external type edgeSet = "(Int256Map.t (list int256))"
+external type int2intMap = "(Int256Map.t int256)"
+(* change the following to be realistic *)
+external let leaderAddrs [[unfold always]] : (list addr) = "nil"
+external let partyAddrs [[unfold always]] : (list addr) = "nil"
+external let edges [[unfold always]] : edgeSet = "(Int256Map.init (nil: (list addr)))"
+external let edges_reverse [[unfold always]] : edgeSet = "(Int256Map.init (nil: (list addr)))"
+(* map addresses to index 0 ... n-1 *)
+external let leaderInds [[unfold always]] : int2intMap = "(Int256Map.init (Int256Map.zero))"
+external let partyInds [[unfold always]] : int2intMap = "(Int256Map.init (Int256Map.zero))"
+external let map_getval [[unfold always]] : (int2intMap * addr) -> int = "(fun key d => (Int256Map.get key d))"
+external let in_list [[unfold always]] : (addr * (list addr)) -> bool 
+	= "(fix in_list_fix a lds := match lds with | nil => false | (cons d rest) => if (Int256.eq a d) then true else (in_list_aux a rest) end)"
+external let get_dst_vertices [[unfold disallowed]] : (addr * edgeSet) -> (list addr)
+	= "(fun src e_set => (Int256Map.get src e_set))"
+external let compute_longest_path [[unfold disallowed]] : (addr * addr) -> uint = 
+	(* FIXME:
+		check out the `compute_longest_path` function in impl.v coq file 
+		i don't know how program fixpoint as well as anonymous recursive 
+		functions work with deepsea, esp since this func required a separate helper
+		function 
+		
+		For now, a dummy placeholder. 
+		*)
+	"(fun pt ld => Int256.one)"
+
+type edgeset := mapping[addr] (array[numPartiesInt] addr) 
+
+(*external let timelocks [[unfold always]] : list timeunit
+	= "(nil)"
+external let hashlocks [[unfold always]] : list hashvalue
+	= "(nil)"*)
+
+
+object signature EVMOpcodeInterface = {
+
+  transfer : addr * uint -> unit;
+}
+
+trusted object EVMOpcode : EVMOpcodeInterface {
+    let _events : list Transfer := transfer_nil
+
+
+    let transfer (toaddr, much) =
+        let e = _events in
+        _events := transfer_cons_unzip (much, toaddr, e);
+        ()
+}
+
+(* place holder for digraph related methods *)
+object signature DiGraphInterface = {
+	initialize : addr -> unit; 
+	const diam : unit -> uint;
+	(* longest path from party (src) to leader (dst) (secret goes the other way) *)
+	const maxpathlen : addr * addr -> uint; 
+	(*const preprocess_sign : addr * addr * addr -> bool; *)
+	is_leader : addr -> bool;
+	is_party : addr -> bool; 
+	is_edge : addr * addr -> bool; 
+	const get_leader_ind : addr -> int; 
+	const get_party_ind : addr -> int; 
+	(* in regards to the hashlock by leader on edge from party to counterparty *)
+	const valid_path : addr * addr * addr -> bool; 
+	sign_follower : addr * addr * addr * addr -> unit; 
+	sign_leader : addr * addr * addr -> unit; 
+	(* the return type may also be addr -> the addr from which this follower learned the secret *)
+	can_sign_follower : addr * addr * addr -> bool; 
+	get_path_len : addr * addr * addr -> uint; 
+}
+
+
+type Path = {
+	(* which hashkey *)
+	path : array[numPartiesInt] addr;
+	nextInd : int; 
+}
+
+type Hashkeys = {
+	toleader : array[numLeadersInt] Path; 
+}
+
+(* 	in regards to the paths and signatures: 
+	there is not a real difference between paths and secrets, 
+	since the way we currently model signature is not based on crypto 
+	but rather a faithful record of a series of events. *)
+
+trusted object DiGraph () : DiGraphInterface {
+	(* di-graph related *)
+	let _leaders : array[numLeadersInt] uint := array_init 
+	let _parties : array[numPartiesInt] uint := array_init 
+	let _edges : edgeset := mapping_init 
+	let _edges_reverse : edgeset := mapping_init 
+	let _party_addr_to_ind : mapping[addr] int := mapping_init
+	let _leader_addr_to_ind : mapping[addr] int := mapping_init
+
+	(* contract related *)
+	let _party : addr := 0u0 
+	let _counterparty :addr := 0u0 
+	let _hashkeyinit : array[numLeadersInt] Path := array_init 
+	let _innerpathinit : array[numPartiesInt] Hashkeys := array_init 
+
+	(* for each edge, the list of paths so far corresponding to each hashlock 
+		indices work like `_allpaths[counterparty_ind][party_ind]` *)
+	let _allpaths : array[numPartiesInt] (array[numPartiesInt] Hashkeys) := array_init 
+	let _res_is_leader : bool := false 
+	let _res_is_party : bool := false 
+	let _res_is_edge : bool := false 
+	let _res_has_signed : bool := false 
+	let _res_can_sign : bool := false 
+	let _res_path_len : uint := 0u0 
+
+	let initialize (counterparty) = 
+		_counterparty := counterparty; 
+		_party := msg_sender; 
+		for i = 0 to numLeadersInt do 
+			begin _hashkeyinit[i].path := array_init; 
+					_hashkeyinit[i].nextInd := 0 
+			end
+		;
+		let hashkeyinit = _hashkeyinit in 
+		for i = 0 to numPartiesInt do 
+			begin _innerpathinit[i].toleader := hashkeyinit end 
+		;
+		let innerpathinit = _innerpathinit in 
+		for i = 0 to numPartiesInt do 
+			begin _allpaths[i] := innerpathinit end 
+		;
+		(* initialize _edges, _edges_reverse, _party_addr_to_ind, _leader_addr_to_ind here *)
+		()
+
+	let is_leader (ld_addr) = 
+		_res_is_leader := false; 	
+		for i = 0 to numLeadersInt do 
+			begin let it = _leaders[i] in 
+				if it = ld_addr then _res_is_leader := true 
+				else ()
+			end 
+		;
+		let res_is_leader = _res_is_leader in 
+			res_is_leader 
+
+	let is_party (pt_addr) = 
+		_res_is_party := false; 		
+		for i = 0 to numPartiesInt do 
+			begin let it = _parties[i] in 
+				if it = pt_addr then _res_is_party := true 
+				else ()
+			end
+		;
+		let res_is_party = _res_is_party in 
+			res_is_party 
+
+
+	let is_edge (src, dst) = 
+		_res_is_edge := false; 
+		for i = 0 to numPartiesInt do 
+			begin let it = _edges[src][i] in 
+				if it = dst then _res_is_edge := true else ()
+			end
+		;
+		let res_is_edge = _res_is_edge in 
+			res_is_edge 
+
+
+	(* assumption: is_party(ld_addr) = true *)
+	let get_leader_ind (ld_addr) = 
+		let res = _leader_addr_to_ind[ld_addr] in 
+			res 
+
+	let get_party_ind (pt_addr) = 
+		let res = _party_addr_to_ind[pt_addr] in 
+			res 
+
+	(* the signer (which is the msg_sender) puts their addr on the "hashkey"
+		at one of the hashlocks on the edge from party to counterparty. 
+		*)
+	(* assumption: all addresses and edges are valid *)
+	let valid_path (party_addr, counterparty_addr, leader_addr) = 
+		(* for now, we only allow counterparty_addr to be msg_sender 
+				but our definition of _allpaths allow for more signing *)
+		let pt_ind = _party_addr_to_ind[party_addr] in 
+		let counterpt_ind = _party_addr_to_ind[counterparty_addr] in 
+		let ld_ind = _leader_addr_to_ind[leader_addr] in 
+		let path_len = _allpaths[counterpt_ind][pt_ind].toleader[ld_ind].nextInd in 
+			if (path_len = 0) then false else 
+			let first_signer = _allpaths[counterpt_ind][pt_ind].toleader[ld_ind].path[0] in 
+			let last_signer = _allpaths[counterpt_ind][pt_ind].toleader[ld_ind].path[path_len -1] in 
+				((first_signer = leader_addr) /\ (last_signer = counterparty_addr))
+	
+
+	let sign_follower (party_addr, counterparty_addr, src_addr, leader_addr) = 
+		assert (counterparty_addr = msg_sender); 
+		let pt_ind = _party_addr_to_ind[party_addr] in 
+		let counterpt_ind = _party_addr_to_ind[counterparty_addr] in 
+		let ld_ind = _leader_addr_to_ind[leader_addr] in 
+		let src_ind = _party_addr_to_ind[src_addr] in 
+		let next_ind = _allpaths[src_ind][counterpt_ind].toleader[ld_ind].nextInd in 
+			(* path to copy can't be of length 0 *)
+			assert (next_ind > 0); 
+			(* last signer of this path should be src_addr *)
+			let last_signer = _allpaths[src_ind][counterpt_ind].toleader[ld_ind].path[next_ind-1] in 
+			assert (last_signer = src_addr);  
+			(* now, copy this path and add self (msg_sender) to it *)
+			for i = 0 to next_ind do 
+			begin 
+				let to_copy = _allpaths[src_ind][counterpt_ind].toleader[ld_ind].path[i] in 
+				_allpaths[counterpt_ind][pt_ind].toleader[ld_ind].path[i] := to_copy
+			end;
+			_allpaths[counterpt_ind][pt_ind].toleader[ld_ind].path[next_ind] := counterparty_addr;
+			_allpaths[counterpt_ind][pt_ind].toleader[ld_ind].nextInd := next_ind+1
+		; ()
+
+	let sign_leader (party_addr, counterparty_addr, leader_addr) = 
+		assert (counterparty_addr = msg_sender); 
+		assert (leader_addr = msg_sender); 
+		let pt_ind = _party_addr_to_ind[party_addr] in 
+		let counterpt_ind = _party_addr_to_ind[counterparty_addr] in 
+		let ld_ind = _leader_addr_to_ind[leader_addr] in 
+		let path_len = _allpaths[counterpt_ind][pt_ind].toleader[ld_ind].nextInd in 
+			(* only leader can sign this, and it should be empty *)
+			assert (path_len = 0);
+			_allpaths[counterpt_ind][pt_ind].toleader[ld_ind].path[0] := leader_addr; 
+			_allpaths[counterpt_ind][pt_ind].toleader[ld_ind].nextInd := path_len+1; 
+			()
+
+
+	let can_sign_follower (party_addr, counterparty_addr, leader_addr) = 
+		assert (counterparty_addr = msg_sender);
+		_res_can_sign := false; 
+		(*let all_outgoing_edges = _edges[counterparty_addr] in *)
+		let ld_ind = _leader_addr_to_ind[leader_addr] in 
+		let self_ind = _party_addr_to_ind[counterparty_addr] in 
+			for i = 0 to numPartiesInt do 
+				begin 
+					let dst_addr = _edges[counterparty_addr][i] in 
+					if dst_addr = 0u0 then () else 
+					let dst_ind = _party_addr_to_ind[dst_addr] in 
+					let next_ind = _allpaths[dst_ind][self_ind].toleader[ld_ind].nextInd in 
+					if (next_ind = 0) then () else 
+					let last_signer = _allpaths[dst_ind][self_ind].toleader[ld_ind].path[next_ind-1] in 
+					if (last_signer = dst_addr) then _res_can_sign := true else ()
+				end
+		; let res_can_sign = _res_can_sign in res_can_sign
+
+	(* needs to do this dumb way because there is no type conversion *)
+	let get_path_len (party_addr, counterparty_addr, leader_addr) = 
+		(* assume addresses already verified. currently true in code. *)
+		_res_path_len := 0u0; 
+		let pt_ind = _party_addr_to_ind[party_addr] in 
+		let counterpt_ind = _party_addr_to_ind[counterparty_addr] in 
+		let ld_ind = _leader_addr_to_ind[leader_addr] in 
+		let path_len = _allpaths[counterpt_ind][pt_ind].toleader[ld_ind].nextInd in 
+			for i = 0 to path_len do 
+			begin 
+				let old_val = _res_path_len in 
+					_res_path_len := old_val + 0u1 
+			end;
+			let res_path_len = _res_path_len in res_path_len
+
+	let diam () = 
+		diam
+
+	let maxpathlen (pt, ld) = 
+		let parties = partyAddrs in 
+		let leaders = leaderAddrs in 
+		let is_party = in_list(pt, parties) in 
+		let is_leader = in_list(ld, leaders) in 
+		let res = compute_longest_path(pt, ld) in 
+		assert (is_party);
+		assert (is_leader);
+		res 
+
+}
+
+object signature SwapContractInterface = {
+
+	initialize : uint * addr * timeunit * timeunit -> unit;
+	unlock : addr * uint -> unit; 
+	claim : unit -> unit; 
+	refund : unit -> unit; 
+}
+
+(* contract interface *)
+object SwapContract (digraph: DiGraphInterface, evm: EVMOpcodeInterface): SwapContractInterface {
+	
+	let _assetAmount : uint := 0u0 
+	(* idk what's a good way to initialze these two arrays *)
+	let _timelocks : array[numLeadersInt] timeunit := array_init 
+	let _hashlocks : array[numLeadersInt] hashvalue := array_init 
+	let _party : addr := 0u0 
+	let _counterparty : addr := 0u0 
+	let _start : timeunit := 0u0 
+	let _delta : timeunit := 0u0 
+	let _unlocked : (array[numLeadersInt] bool) := array_init  
+	(* after the asset has been claimed, halt *)
+	let _ended : bool := false 
+	(* refund hack for dealing with any *)
+	let _canrefund : bool := false 
+
+	(* initialize the contract, party (msg_sender) publishes contract *)
+	let initialize (amount, counterparty, start, delta) = 
+		(* start time is at least delta into the future *)
+		assert(start >= block_timestamp + delta);
+		_counterparty := counterparty; 
+		_assetAmount := amount; 
+		_party := msg_sender;
+		_start := start; 
+		_delta := delta; 
+		(*_timelocks := timelocks;*)
+		(*_hashlocks := hashlocks; *)
+		_canrefund := false; 
+		begin 
+		for i = 0 to numLeadersInt do 
+			_unlocked[i] := false
+	    end;
+		()
+
+	(* In general, we can't do unlock(secret), because secret can be learned by everyone else
+		but in the protocol, by our design, the path verification hopefully can ensure that 
+		this is correct. i.e., secret won't help if they can't forge events due to permission. *)
+	let unlock (leader_addr, secret) = 
+		(* first check all conditions are satisfied *)
+		let is_leader = digraph.is_leader(leader_addr) in 
+		let party = _party in 
+		let counterparty = _counterparty in 
+		let ld_ind = digraph.get_leader_ind(leader_addr) in 
+		let hashlock = _hashlocks[ld_ind] in 
+			assert (is_leader); 
+			assert (msg_sender = counterparty); 
+			assert (hashlock = keccak256(secret)); 
+		let path_verified = digraph.valid_path(party, counterparty, leader_addr) in 
+		let path_len = digraph.get_path_len(party, counterparty, leader_addr) in 
+		let start = _start in 
+		let delta = _delta in 
+			assert (block_timestamp < start+(diam+path_len)*delta);
+			assert (path_verified); 
+			(* finally, unlock *)
+			_unlocked[ld_ind] := true;
+			()
+
+	let claim () = 
+		let counterparty = _counterparty in 
+		let assetAmount = _assetAmount in 
+		let ended = _ended in 
+			assert (!ended); 
+			assert (counterparty = msg_sender);
+			for i = 0 to numLeadersInt do 
+			begin 
+				let unlock_status = _unlocked[i] in 
+					assert (unlock_status = true) 
+			end ; 
+			evm.transfer (counterparty, assetAmount); 
+			_ended := true; 
+			()
+
+	let refund () =
+		let party = _party in 
+		let assetAmount = _assetAmount in 
+		let ended = _ended in 
+		let start = _start in
+			_canrefund := false; 
+			assert (!ended);
+			assert (party = msg_sender);
+			for i = 0 to numLeadersInt do 
+			begin 
+				let isunlocked = _unlocked[i] in 
+				let timeout = _timelocks[i] in 
+				if ((isunlocked = false) /\ (block_timestamp >= start + timeout))
+				then _canrefund := true else ()
+			end;
+			let canrefund = _canrefund in 
+				assert (canrefund);
+			evm.transfer (party, assetAmount); 
+			_ended := true;
+			() 
+}
+
+
+layer signature SWAPCONTRACTSig = {
+	swapcontract : SwapContractInterface
+}
+
+layer signature EVMOPCODESig = {
+    evm : EVMOpcodeInterface;
+    digraph : DiGraphInterface;
+}
+
+layer EVMOPCODE : [{}] EVMOPCODESig = {
+    evm = EVMOpcode; 
+    digraph = DiGraph
+}
+
+layer SWAPCONTRACT : [EVMOPCODESig] SWAPCONTRACTSig = {
+  swapcontract = SwapContract
+}
+
+layer COMPLETE = SWAPCONTRACT @ EVMOPCODE 
+

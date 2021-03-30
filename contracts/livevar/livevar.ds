@@ -1,0 +1,40 @@
+object signature OS = {
+  f : unit -> unit;
+}
+
+object O : OS {
+  (* should succeed *)
+  let f () =
+    let a1 = 1 in
+    let a2 = a1 in
+    let a3 = a2 in
+    let a4 = a1 in
+    let a5 = a2 in
+    let a6 = a1 in
+    let a7 = a2 in
+    let a8 = a1 in
+    let a9 = a2 in
+    let a10 = a1 in
+    let a11 = a2 in
+    let a12 = a1 in
+    let a13 = a2 in
+    let a14 = a1 in
+    let a15 = a2 in
+    let a16 = a1 in
+    let a17 = a2 in
+    let a18 = a2 in
+    let a19 = a1 in
+    let a20 = a2 in
+    let a21 = a1 in
+    let a32 = a2 in
+    let a232 = a1 in
+    let a31 = a2 in
+    let a211 = a1 in
+    let a399 = a2 in
+    assert (a399+a19 = 2)
+
+}
+
+layer L = {
+  o = O
+}

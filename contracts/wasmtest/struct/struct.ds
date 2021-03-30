@@ -1,0 +1,36 @@
+type addr := int
+
+object signature OS = {
+	initialize : int * int -> unit;
+	hasOwner : unit -> int;
+	hasSupply : int -> bool;
+}
+
+type Token = {
+	totalSupply : int;
+	owner : addr
+}
+
+object O : OS {
+	let token : Token := { totalSupply=0; owner=0 }
+
+	let initialize (_totalSupply, _owner) = 
+		token.totalSupply := _totalSupply;
+		token.owner := _owner;
+		()
+
+	let hasOwner () =
+		token.owner := 180;
+		token.totalSupply := 18;
+		let _owner = token.owner in
+		_owner
+
+	let hasSupply (amount) =
+		let _totalSupply = token.totalSupply in
+		_totalSupply < amount
+	
+}
+
+layer L = {
+  o = O
+}

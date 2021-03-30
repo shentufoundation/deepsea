@@ -1,5 +1,5 @@
 object signature OS = {
-  f : unit -> bool;
+  f : uint -> uint;
     
   const get_address : unit -> address;
   const get_origin : unit -> address;
@@ -34,7 +34,7 @@ object O : OS {
   let get_balance_this () = let x = _balance_this in x
   let get_blockhash_prev () = let x = _blockhash_prev in x
     
-  let f () =
+  let f (v) =
     _address := this_address; 
     _origin := tx_origin;
     _caller := msg_sender;
@@ -44,7 +44,9 @@ object O : OS {
     _number := block_number;
     _balance_this := balance(this_address);
     _blockhash_prev := blockhash(block_number-0u1);
-    true
+    let addr = _timestamp in
+    let addr = addr + v in
+    addr
  }
 
 layer L = {
