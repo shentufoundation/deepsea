@@ -57,6 +57,8 @@ and p_command_desc =
      event constructor directly applied to arguments, but
      hypothetically you could pass around events as a first-class data type. *)
   | PCemit of p_expression
+  (* [from; to; value] *)
+  | PCtransfer of p_expression list
 
   (* extension for certified programming *)
   | PCstore of p_expression * p_expression
@@ -351,6 +353,7 @@ and string_of_p_command_desc = function
     string_of_p_expression l ^ " to " ^ string_of_p_expression h ^
     "\n| " ^ a ^ " = " ^ string_of_p_expression s ^
     "\ndo " ^ string_of_p_command c
+  | PCtransfer l -> "transfer(" ^ String.concat ", " (List.map string_of_p_expression l)  ^ ")"
 and string_of_p_clause_list cls = String.concat "\n"
       (List.map (fun (i, vs, c) -> "| " ^ i ^ " " ^ String.concat " " vs ^
                                    " => " ^ string_of_p_command c) cls)

@@ -1643,7 +1643,7 @@ let typecheck parsed filename =
         }) when (List.length a2 <> 1) (* only process method calls, not struct access *) ->
         let s1 = get_field_ident a1 cmd.p_command_loc in (* contract/layer name *)
         let s2 = get_field_ident a2 cmd.p_command_loc in (* method name *)
-        let value, gas = ( (* Both optional. If `value` is given, `gas` must be too. *)
+        let value, gas = ( (* Both optional. If `gas` is given, `value` must be too. *)
           let invalid () = report_error "Invalid value/gas arguments" cmd.p_command_loc; None, None in
           match List.length a1 with
           | 1 -> None, None
@@ -2005,6 +2005,11 @@ let typecheck parsed filename =
            return next_id' t c''.aCmdEffect @@
              ACfold (n_iter, i_iter, e1', n_end, e2', n_acc, i_acc, e3', n_c, c'',
                      parse_captured_command_annotations tmp_env a)
+      | PCtransfer l ->
+        if List.length l <> 2 then report_error ("transfer takes exactly 2 argumemts") cmd.p_command_loc;
+        let to_addr = translate_rexpr env.variable_env tmp_env (List.nth l 0) in
+        let value = translate_rexpr env.variable_env tmp_env (List.nth l 1) in
+        return next_id tvoid_unit side_effect_pure (ACtransfer (to_addr, value))
 
   and translate_assertion mk env next_id tmp_env is_assert c =
     let c', next_id' = translate_command mk env true (next_id + 1) tmp_env c in

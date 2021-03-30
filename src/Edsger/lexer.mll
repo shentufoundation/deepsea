@@ -50,6 +50,7 @@ let keyword_table =
     "with", WITH;
     "list", LIST;
     "clone", CLONE;
+    "transferEth", TRANSFERETH;
   ];
   tbl
 

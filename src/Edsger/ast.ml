@@ -213,6 +213,7 @@ and a_command_desc =
   | ACsequence of a_command * a_command
   (* ACcall: layer signature name * method name * args * value* gas*)
   | ACcall of ident * ident * a_rexpr list * a_rexpr option * a_rexpr option
+  | ACtransfer of a_rexpr * a_rexpr
   | ACcond of a_rexpr * a_command * a_command
   | ACfor of tmp_id_t * ident * a_rexpr * tmp_id_t * a_rexpr * a_command
       (* FOR (*NUM*)    i     = 0      TO (*HOLDER*) n      DO s.run i *)
@@ -598,6 +599,8 @@ let rec string_of_a_command c = match c.aCmdDesc with
                            string_of_a_command c2
   | ACcall (s, f, es, _, _) -> "call " ^ s ^ "." ^ f ^ " (" ^
     String.concat ", " (List.map string_of_a_rexpr es) ^ ")"
+  | ACtransfer (t, v) -> "transfer(" ^ String.concat ", "
+    (List.map string_of_a_rexpr [t; v]) ^ ")"
   | ACcond (e, c1, c2) -> "if " ^ string_of_a_rexpr e ^
                           "\n  then " ^ string_of_a_command c1 ^
                           "\n  else " ^ string_of_a_command c2

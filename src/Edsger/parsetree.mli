@@ -39,6 +39,7 @@ and p_command_desc =
         (* FOR i     = 0           TO n           DO s.run i *)
   | PCmatch of p_expression * p_clause list
   | PCemit of p_expression
+  | PCtransfer of p_expression list
 
   (* extension for certified programming *)
   | PCstore of p_expression * p_expression

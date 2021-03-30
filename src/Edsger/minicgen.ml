@@ -656,6 +656,14 @@ and gen_cmd underlay obj pure c dest =
         coqlist_of_list args
       )
     )
+  | ACtransfer (to_addr, value) -> Scallmethod (
+      gen_rexpr to_addr,
+      coqlist_of_list [],
+      BinNums.Z0,
+      gen_rexpr value,
+      D.None,
+      coqlist_of_list []
+    )
   | ACcond (e, c_then, c_else) ->
      Sifthenelse (gen_rexpr e,
 		  gen_cmd underlay obj pure c_then dest,
@@ -957,6 +965,7 @@ let rec gen_cmd_locals c dest =
   | ACsequence (c1, c2) ->
      gen_cmd_locals c1 dest @ gen_cmd_locals c2 dest
   | ACcall (s, f, es, _, _) -> []
+  | ACtransfer (_, _) -> []
   | ACcond (e, c1, c2) ->
      gen_cmd_locals c1 dest @ gen_cmd_locals c2 dest
   | ACfor (n_iter, i, e1, n_end, e2, c, None) ->

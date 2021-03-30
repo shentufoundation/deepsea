@@ -130,6 +130,7 @@ let cons_either_double_list e (l1, l2) = match e with
 %token TO
 %token WITH
 %token CLONE
+%token TRANSFERETH
 
 %token AT
 %token ARROW
@@ -589,6 +590,7 @@ command_core:
   | FOLD annotations IDENT eq_or_assign e1=expression TO e2=expression
      BAR             IDENT eq_or_assign e3=expression DO command
       { PCfold ($3, mkexp_ ~loc:$sloc e1.p_expression_desc, mkexp_ ~loc:$sloc e2.p_expression_desc, $9, mkexp_ ~loc:$sloc e3.p_expression_desc, $13, $2) }
+  | TRANSFERETH l=delimited(LPAREN, separated_list(COMMA, expression), RPAREN) { PCtransfer l }
 ;
 command:
     c=command_core  { mkcmd ~loc:$sloc c }

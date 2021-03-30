@@ -1964,6 +1964,11 @@ let output_command env out base_layer obj method_full_name =
         output_string out ("(CCcall " ^ ident_of_primitive base_layer s f ^ "\n" ^ ind);
         output_args ("  " ^ ind) es;
         output_char out ')')
+    | ACtransfer (e1, e2) ->
+      output_string out "(CCtransfer ";
+      output_rexpr out ind e1;
+      output_rexpr out ind e2;
+      output_char out ')'
     | ACcond (e, c_then, c_else) ->
       output_string out "(CCifthenelse ";
       output_rexpr out ("  " ^ ind) e;
@@ -2192,7 +2197,7 @@ let output_command env out base_layer obj method_full_name =
 (* It would be a good idea to make the "ignore base" user-configurable, right now it's just an ad-hoc mess of things that comes up in different examples.. .*)       
        
 let cbv_ignore_base = "Int256.modulus zeq zle zlt Z.iter Z.le Z.lt Z.gt Z.ge Z.eqb Z.leb Z.ltb Z.geb Z.gtb Z.mul Z.div Z.modulo Z.add Z.sub Z.shiftl Z.shiftr Z.lxor Z.land Z.lor Z.of_nat
-Int256.repr Int256.zero Int256.add Int256.sub Int256.mul Int256.modu Int256.divu Int256.not Int256.and Int256.or Int256.xor Int256.shl Int256.shru Int256.eq Int256.lt Int256.ltu Ziteri 
+Int256.repr Int256.zero Int256.one Int256.add Int256.sub Int256.mul Int256.modu Int256.divu Int256.not Int256.and Int256.or Int256.xor Int256.shl Int256.shru Int256.eq Int256.lt Int256.ltu Ziteri 
 List.length is_true bool_dec
 negb andb orb
 hashvalue_eqb me_address me_origin me_caller me_callvalue me_coinbase me_timestamp me_number me_balance me_blockhash me_transfer me_callmethod
@@ -2237,7 +2242,7 @@ let prepare_command env out base_layer obj method_full_name =
 
   let rec prepare pure path dest c = match c.aCmdDesc with
     | ACskip | ACyield _ | ACcall _ | ACemit _ | ACload _ | ACstore _ | ACconstr _
-    | ACfail | ACexternal _ -> ()
+    | ACfail | ACtransfer (_,_) | ACexternal _ -> ()
 
     | AClet (tmp_id, _, c1, c2) -> prepare pure (1::path) tmp_id c1; prepare pure (2::path) dest c2
     | ACsequence (c1, c2) -> prepare pure (1::path) dest c1; prepare pure (2::path) dest c2
@@ -4688,7 +4693,7 @@ let gen_global_abstract_data_type env final_layer fileDeclarations = function
 let gen_coqProj env fileDeclarations = 
   let stream = open_out (env.project_name ^ "/_CoqProject") in
   output_string stream (
-    "-R ../../../src DeepSpec\n" ^
+    "-R ../../.. DeepSpec\n" ^
     "-R . " ^ env.project_name ^ "\n" ^
     "./EdsgerIdents.v\n" ^
     "./DataTypes.v\n" ^
