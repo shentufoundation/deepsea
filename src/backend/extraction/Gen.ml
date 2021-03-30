@@ -516,7 +516,6 @@ and clike_lvalue = function
 | Eglob (id, ty) ->
   ret (Obj.magic coq_Monad_optErr) (Eunop (Osha_1, (constofpos id), (Tpointer
     (Coq_stor, ty))))
-| Etempvar (id, ty) -> ret (Obj.magic coq_Monad_optErr) (Etempvar (id, ty))
 | Ederef (ex0, _) -> clike_rvalue ex0
 | Efield (ex0, id, ty) ->
   bind (Obj.magic coq_Monad_optErr) (clike_lvalue ex0) (fun ex' ->
