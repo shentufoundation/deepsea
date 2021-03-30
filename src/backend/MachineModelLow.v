@@ -37,8 +37,7 @@ Record machine_env  : Type := mkmachine {
   me_balance : int256 -> int256;   (* Todo: make it int160. *)
   me_blockhash : int256 -> int256;
 
-  (* todo: this is bad because it doesn't deal with potential reentrancy. *)
-  me_transfer : forall (addr value: val)(prev_dat new_data: adata) (success: int256), Prop;
+  me_transfer : forall (addr value: val)(d: adata), (int256 * adata);
   (* addr, sig, value, args, prev_data, prev_storage, new_data, new_storage, success, retvals *)
   me_callmethod : val -> int -> val -> list val -> adata -> stack_env -> hash_env -> adata -> stack_env -> hash_env -> int256 -> list val -> Prop;
   me_log : forall (topics : list val) (args : list val), adata -> adata

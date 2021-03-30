@@ -73,7 +73,8 @@ Record machine_env  : Type := mkmachine {
   me_blockhash : int256 -> int256;
 
   (* todo: this is bad because it doesn't deal with potential reentrancy. *)
-  me_transfer : forall (addr value: val)(prev_dat new_data: adata) (success: int256), Prop;
+  (* Returns an int representing success/failure, and the new abstract state. *)
+  me_transfer : forall (addr value: int256)(d: adata), (int256 * adata);
   (* addr, sig, value, args, prev_data, prev_storage, new_data, new_storage, success, retvals *)
   me_callmethod : val -> int -> val -> list val -> adata -> ext_env -> adata -> ext_env -> int256 -> list val -> Prop;
   me_log : forall (topics : list val) (args : list val), adata -> adata
