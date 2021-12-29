@@ -29,7 +29,7 @@ export async function runTest(chain: Chain) {
   // Note that below, we get different results for the hashes of addresses than Solidity would give,
   // becuase we have more zero-padding.
 
-  let xa = ethers.utils.getAddress("0x000000000000000000000000000000000000002a");
+  let xa = ethers.utils.getAddress("0x6ddb3FFd29ea4B8C236A44956993a9E6CeCb2849");
   let xa_hash = await chain.callMethod("hash1a", [xa]);
   printTest("hash1a", checkHash(chain, xa_hash, [x])) //note: x, not xa.
 
